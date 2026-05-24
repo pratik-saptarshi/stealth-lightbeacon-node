@@ -38,6 +38,7 @@ const node_child_process_1 = require("node:child_process");
 const node_util_1 = require("node:util");
 const fs = __importStar(require("node:fs"));
 const ssrf_1 = require("../ssrf");
+const fetcher_1 = require("../fetcher");
 const execFileAsync = (0, node_util_1.promisify)(node_child_process_1.execFile);
 class ObscuraEngine {
     binaryPath;
@@ -55,11 +56,13 @@ class ObscuraEngine {
         // Check if the binary exists and is executable
         if (fs.existsSync(this.binaryPath) && fs.statSync(this.binaryPath).isFile()) {
             try {
-                const { stdout, stderr } = await execFileAsync(this.binaryPath, ['--dump', 'html', url], {
-                    timeout: 15000
-                });
+                // Enforce redirects limit inside the binary if supported, or validate pre-fetch IP
+                const parsed = new URL(url);
+                const host = parsed.hostname;
+                const pinnedIp = this.ssrfGuard.getPinnedAddress(host);
+                const targetUrl = pinnedIp ? url.replace(host, pinnedIp) : url;
+                const { stdout } = await execFileAsync(this.binaryPath, ['--dump', 'html', '--max-redirects', '0', targetUrl], { timeout: 15000 });
                 const elapsed = Date.now() - startTime;
-                // Construct standard CrawledPage
                 return {
                     url,
                     html: stdout,
@@ -69,49 +72,14 @@ class ObscuraEngine {
                 };
             }
             catch (err) {
-                // Fall back gracefully on subprocess failure or error
-                console.warn(`Obscura binary execution failed: ${err.message}. Falling back to spoofed browser client...`);
+                console.warn(`Obscura binary exec failed: ${err.message}. Falling back to spoofed browser client...`);
             }
         }
-        // Fallback: Specialized browser-spoofing client
         return this.scrapeFallback(url, startTime);
     }
     async scrapeFallback(url, startTime) {
-        const spoofedHeaders = {
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': '"Linux"',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Upgrade-Insecure-Requests': '1'
-        };
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: spoofedHeaders,
-            redirect: 'follow'
-        });
-        const finalUrl = response.url;
-        // Post-navigation redirect SSRF validation
-        await this.ssrfGuard.validate(finalUrl);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch ${url}: ${response.statusText} (${response.status})`);
-        }
-        const html = await response.text();
-        const headers = Object.fromEntries(Object.entries(response.headers).map(([k, v]) => [k.toLowerCase(), String(v)]));
-        return {
-            url: finalUrl,
-            html,
-            headers,
-            status: response.status,
-            responseTimeMs: Date.now() - startTime
-        };
+        const defaultUA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+        return (0, fetcher_1.fetchHttpPage)(url, this.ssrfGuard, defaultUA);
     }
 }
 exports.ObscuraEngine = ObscuraEngine;

@@ -12,6 +12,7 @@ import { PageSpeedService } from './core/pagespeed';
 import { validateBudgets } from './core/budget';
 import { SSRFGuard } from './core/ssrf';
 import { createOntologyStore } from './core/ontology';
+import { BrowserPool } from './core/scraping/browserPool';
 
 const DEFAULT_OUTPUT_DIR = 'reports';
 
@@ -209,6 +210,7 @@ async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknow
   } finally {
     await pageSpeedService?.close();
     await ontologyStore?.close();
+    await BrowserPool.getInstance().close();
   }
 }
 

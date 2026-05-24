@@ -35,18 +35,61 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.crawlSite = crawlSite;
 const cheerio = __importStar(require("cheerio"));
+const duckdb_1 = require("./db/duckdb");
+class Mutex {
+    queue = [];
+    locked = false;
+    async acquire() {
+        if (!this.locked) {
+            this.locked = true;
+            return;
+        }
+        return new Promise((resolve) => {
+            this.queue.push(resolve);
+        });
+    }
+    release() {
+        if (this.queue.length > 0) {
+            const next = this.queue.shift();
+            if (next) {
+                next();
+            }
+        }
+        else {
+            this.locked = false;
+        }
+    }
+    async runExclusive(fn) {
+        await this.acquire();
+        try {
+            return await fn();
+        }
+        finally {
+            this.release();
+        }
+    }
+}
 async function crawlSite(options) {
     const start = new URL(options.startUrl);
-    const queue = [{ url: start.toString(), depth: 0 }];
-    const visited = new Set();
-    const pages = [];
-    const brokenPages = new Map();
     const concurrency = options.concurrency ?? 1;
     const throttleMs = options.throttleMs ?? 0;
-    // Track start URL as visited
-    visited.add(normalizeUrl(start.toString()));
+    // Spin up a temporary DuckDB instance for persisted queue management
+    const duck = await (0, duckdb_1.createDuckDbRuntime)({ databasePath: ':memory:' });
+    await duck.exec({
+        sql: `
+      CREATE TABLE crawl_queue (
+        url VARCHAR PRIMARY KEY,
+        depth INTEGER,
+        status VARCHAR DEFAULT 'pending'
+      )
+    `
+    });
+    const pages = [];
+    const brokenPages = new Map();
     let activeCount = 0;
     const queueResolvers = [];
+    const popMutex = new Mutex();
+    const activeProcessingUrls = new Set();
     const notifyQueueChanged = () => {
         while (queueResolvers.length > 0) {
             const resolve = queueResolvers.shift();
@@ -55,56 +98,134 @@ async function crawlSite(options) {
             }
         }
     };
+    // Seed the queue with the start URL
+    const normalizedStart = normalizeUrl(start.toString());
+    await duck.exec({
+        sql: `INSERT INTO crawl_queue (url, depth, status) VALUES (?, ?, 'pending') ON CONFLICT DO NOTHING`,
+        params: [normalizedStart, 0]
+    });
+    // Seed the queue with sitemap.xml entries if available
+    const sitemapUrls = await fetchAndParseSitemap(options.startUrl, options.fetchPage);
+    for (const sitemapUrl of sitemapUrls) {
+        const norm = normalizeUrl(sitemapUrl);
+        await duck.exec({
+            sql: `INSERT INTO crawl_queue (url, depth, status) VALUES (?, ?, 'pending') ON CONFLICT DO NOTHING`,
+            params: [norm, 0]
+        });
+    }
+    const getCompletedCount = async () => {
+        const res = await duck.query({
+            sql: `SELECT COUNT(*) as count FROM crawl_queue WHERE status = 'completed'`
+        });
+        return Number(res.rows[0].count);
+    };
+    const getPendingCount = async () => {
+        const res = await duck.query({
+            sql: `SELECT COUNT(*) as count FROM crawl_queue WHERE status = 'pending'`
+        });
+        return Number(res.rows[0].count);
+    };
     const nextEntry = async () => {
-        while (queue.length === 0) {
-            if (activeCount === 0 || pages.length >= options.maxUrls) {
-                return null;
+        return await popMutex.runExclusive(async () => {
+            while (true) {
+                const completed = await getCompletedCount();
+                if (completed >= options.maxUrls) {
+                    return null;
+                }
+                const pending = await getPendingCount();
+                if (pending === 0) {
+                    if (activeCount === 0) {
+                        return null;
+                    }
+                    popMutex.release();
+                    await new Promise((resolve) => {
+                        queueResolvers.push(resolve);
+                    });
+                    await popMutex.acquire();
+                    continue;
+                }
+                const result = await duck.query({
+                    sql: `
+            SELECT url, depth 
+            FROM crawl_queue 
+            WHERE status = 'pending' 
+            ORDER BY depth ASC
+          `
+                });
+                const pendingRow = result.rows.find(row => !activeProcessingUrls.has(row.url));
+                if (!pendingRow) {
+                    if (activeCount === 0) {
+                        return null;
+                    }
+                    popMutex.release();
+                    await new Promise((resolve) => {
+                        queueResolvers.push(resolve);
+                    });
+                    await popMutex.acquire();
+                    continue;
+                }
+                const targetUrl = pendingRow.url;
+                activeProcessingUrls.add(targetUrl);
+                await duck.exec({
+                    sql: `UPDATE crawl_queue SET status = 'fetching' WHERE url = ?`,
+                    params: [targetUrl]
+                });
+                activeCount++;
+                return { url: targetUrl, depth: Number(pendingRow.depth) };
             }
-            await new Promise((resolve) => {
-                queueResolvers.push(resolve);
-            });
-        }
-        const item = queue.shift() || null;
-        if (item) {
-            activeCount++;
-        }
-        return item;
+        });
     };
     const runWorker = async () => {
-        while (pages.length < options.maxUrls) {
+        while (true) {
+            const completed = await getCompletedCount();
+            if (completed >= options.maxUrls) {
+                break;
+            }
             const entry = await nextEntry();
             if (!entry) {
                 break;
             }
+            const normalizedUrl = normalizeUrl(entry.url);
             try {
-                const normalizedUrl = normalizeUrl(entry.url);
                 if (throttleMs > 0) {
                     await new Promise((resolve) => setTimeout(resolve, throttleMs));
                 }
                 const page = await options.fetchPage(normalizedUrl);
                 if (page.status >= 200 && page.status < 300) {
+                    await duck.exec({
+                        sql: `UPDATE crawl_queue SET status = 'completed' WHERE url = ?`,
+                        params: [normalizedUrl]
+                    });
                     pages.push(page);
-                    if (entry.depth < options.maxDepth && pages.length < options.maxUrls) {
+                    const currentCompleted = await getCompletedCount();
+                    if (entry.depth < options.maxDepth && currentCompleted < options.maxUrls) {
                         const discovered = discoverInternalLinks(page.html, normalizedUrl, start.hostname);
                         for (const link of discovered) {
-                            if (pages.length + queue.length >= options.maxUrls) {
-                                break;
-                            }
-                            if (!visited.has(link)) {
-                                visited.add(link);
-                                queue.push({ url: link, depth: entry.depth + 1 });
-                            }
+                            const normLink = normalizeUrl(link);
+                            await duck.exec({
+                                sql: `INSERT INTO crawl_queue (url, depth, status) VALUES (?, ?, 'pending') ON CONFLICT DO NOTHING`,
+                                params: [normLink, entry.depth + 1]
+                            });
                         }
                     }
                 }
                 else {
+                    await duck.exec({
+                        sql: `UPDATE crawl_queue SET status = 'failed' WHERE url = ?`,
+                        params: [normalizedUrl]
+                    });
                     brokenPages.set(normalizedUrl, page.status);
                 }
             }
-            catch (err) {
-                // Ignore fetch errors during crawl
+            catch {
+                await duck.exec({
+                    sql: `UPDATE crawl_queue SET status = 'failed' WHERE url = ?`,
+                    params: [normalizedUrl]
+                });
+                brokenPages.set(normalizedUrl, 0);
             }
             finally {
+                activeProcessingUrls.delete(normalizedUrl);
                 activeCount--;
                 notifyQueueChanged();
             }
@@ -115,25 +236,45 @@ async function crawlSite(options) {
         workers.push(runWorker());
     }
     await Promise.all(workers);
+    await duck.close();
     return { pages, brokenPages };
+}
+async function fetchAndParseSitemap(startUrl, fetchPage) {
+    try {
+        const sitemapUrl = new URL('/sitemap.xml', startUrl).toString();
+        const page = await fetchPage(sitemapUrl);
+        if (page.status === 200) {
+            const urls = [];
+            const $ = cheerio.load(page.html, { xmlMode: true });
+            $('loc').each((_, element) => {
+                const text = $(element).text().trim();
+                if (text) {
+                    urls.push(text);
+                }
+            });
+            return urls;
+        }
+    }
+    catch {
+        // Ignore sitemap fetch errors gracefully
+    }
+    return [];
 }
 function discoverInternalLinks(html, baseUrl, hostname) {
     const $ = cheerio.load(html);
     const discovered = new Set();
     $('a[href]').each((_, element) => {
         const href = $(element).attr('href');
-        if (!href) {
-            return;
-        }
-        try {
-            const url = new URL(href, baseUrl);
-            if (url.hostname !== hostname) {
-                return;
+        if (href) {
+            try {
+                const url = new URL(href, baseUrl);
+                if (url.hostname === hostname && url.protocol.startsWith('http')) {
+                    discovered.add(normalizeUrl(url.toString()));
+                }
             }
-            discovered.add(normalizeUrl(url.toString()));
-        }
-        catch {
-            return;
+            catch {
+                // Skip invalid URLs
+            }
         }
     });
     return [...discovered];

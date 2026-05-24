@@ -46,7 +46,7 @@
     "cheerio": "^1.0.0-rc.12",
     "commander": "^11.1.0",
     "handlebars": "^4.7.8",
-    "lighthouse": "^11.4.0",
+    "lighthouse": "^13.3.0",
     "ora": "^7.0.1",
     "playwright-core": "^1.55.0",
     "robots-parser": "^3.0.1",

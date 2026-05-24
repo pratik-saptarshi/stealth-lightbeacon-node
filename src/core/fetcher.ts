@@ -1,4 +1,7 @@
 import * as cheerio from 'cheerio';
+import * as http from 'node:http';
+import * as https from 'node:https';
+import * as dns from 'node:dns';
 import type { CrawledPage } from './crawler';
 import { SSRFGuard } from './ssrf';
 import { createScraper } from './scraping/factory';
@@ -15,23 +18,118 @@ export function createFetchPage(options: FetchPageOptions = {}): (url: string) =
   return createScraper(options);
 }
 
+export interface PinnedRequestOptions {
+  method?: string;
+  headers?: Record<string, string>;
+  pinnedIp?: string;
+}
 
-export async function fetchHttpPage(url: string, guard: SSRFGuard, userAgent: string): Promise<CrawledPage> {
-  const startTime = Date.now();
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'user-agent': userAgent
-    },
-    redirect: 'follow'
+export function requestSecurePinned(
+  urlStr: string,
+  options: PinnedRequestOptions
+): Promise<{ status: number; headers: Record<string, string>; text: () => Promise<string> }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(urlStr);
+    const isHttps = parsed.protocol === 'https:';
+    const host = parsed.hostname;
+    const port = parsed.port ? Number(parsed.port) : (isHttps ? 443 : 80);
+
+    const client = isHttps ? https : http;
+    const reqOptions: https.RequestOptions = {
+      method: options.method ?? 'GET',
+      hostname: host,
+      port,
+      path: parsed.pathname + parsed.search,
+      headers: options.headers,
+      rejectUnauthorized: true
+    };
+
+    if (options.pinnedIp) {
+      reqOptions.lookup = (hostname, opts, callback) => {
+        if (hostname === host) {
+          callback(null, options.pinnedIp!, 4);
+        } else {
+          dns.lookup(hostname, opts, callback);
+        }
+      };
+    }
+
+    const req = client.request(reqOptions, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const bodyText = Buffer.concat(chunks).toString('utf8');
+        const headers: Record<string, string> = {};
+        for (const [key, val] of Object.entries(res.headers)) {
+          if (Array.isArray(val)) {
+            headers[key] = val.join(', ');
+          } else if (val !== undefined) {
+            headers[key] = val;
+          }
+        }
+        resolve({
+          status: res.statusCode ?? 200,
+          headers,
+          text: async () => bodyText
+        });
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.end();
   });
+}
 
-  await guard.validate(response.url);
+export async function fetchHttpPage(
+  url: string,
+  guard: SSRFGuard,
+  userAgent: string,
+  maxRedirects = 5
+): Promise<CrawledPage> {
+  const startTime = Date.now();
+  let currentUrl = url;
+  let redirectsFollowed = 0;
+  let response: { status: number; headers: Record<string, string>; text: () => Promise<string> };
+
+  while (true) {
+    await guard.validate(currentUrl);
+    const parsed = new URL(currentUrl);
+    const host = parsed.hostname;
+    const pinnedIp = guard.getPinnedAddress(host);
+
+    const requestHeaders: Record<string, string> = {
+      'user-agent': userAgent
+    };
+
+    response = await requestSecurePinned(currentUrl, {
+      method: 'GET',
+      headers: requestHeaders,
+      pinnedIp: pinnedIp ?? undefined
+    });
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers['location'];
+      if (!location) {
+        break;
+      }
+      redirectsFollowed++;
+      if (redirectsFollowed > maxRedirects) {
+        throw new Error(`Max redirects (${maxRedirects}) exceeded`);
+      }
+      currentUrl = new URL(location, currentUrl).toString();
+      continue;
+    }
+    break;
+  }
+
   const html = await response.text();
-  const headers = Object.fromEntries(response.headers.entries());
+  const headers = { ...response.headers };
 
   return {
-    url: response.url,
+    url: currentUrl,
     html,
     headers,
     status: response.status,
@@ -55,6 +153,17 @@ async function renderPage(url: string, guard: SSRFGuard, userAgent: string): Pro
 
   try {
     const page = await browser.newPage({ userAgent });
+
+    // Validate every request dynamically before loading
+    await page.route('**/*', async (route: any) => {
+      try {
+        await guard.validate(route.request().url());
+        await route.continue();
+      } catch {
+        await route.abort('blockedbyclient');
+      }
+    });
+
     const response = await page.goto(url, { waitUntil: 'networkidle' });
     const finalUrl = page.url();
     await guard.validate(finalUrl);

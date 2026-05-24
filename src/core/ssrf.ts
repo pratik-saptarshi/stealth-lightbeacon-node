@@ -38,33 +38,45 @@ export interface SSRFGuardOptions {
 
 export class SSRFGuard {
   private readonly allowPrivate: boolean;
+  public static readonly dnsCache = new Map<string, string>();
 
   constructor(options: SSRFGuardOptions = {}) {
     this.allowPrivate = options.allowPrivate ?? false;
   }
 
   async validate(urlValue: string): Promise<void> {
-    if (this.allowPrivate) {
+    const parsedUrl = new URL(urlValue);
+    const host = parsedUrl.hostname;
+    const cleanHost = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+
+    if (isIP(cleanHost)) {
+      if (!this.allowPrivate && isPrivateAddress(cleanHost)) {
+        throw new SSRFViolationError(`Blocked private or loopback address: ${cleanHost}`);
+      }
       return;
     }
 
-    const parsedUrl = new URL(urlValue);
-    const host = parsedUrl.hostname;
-    const addresses = await resolveHost(host);
+    const addresses = await resolveHost(cleanHost);
+    if (addresses.length === 0) {
+      throw new Error(`Failed to resolve host: ${cleanHost}`);
+    }
 
     for (const address of addresses) {
-      if (isPrivateAddress(address)) {
+      if (!this.allowPrivate && isPrivateAddress(address)) {
         throw new SSRFViolationError(`Blocked private or loopback address: ${address}`);
       }
     }
+
+    // Pin the first resolved IP to prevent DNS rebinding
+    SSRFGuard.dnsCache.set(host, addresses[0]);
+  }
+
+  getPinnedAddress(host: string): string | undefined {
+    return SSRFGuard.dnsCache.get(host);
   }
 }
 
 async function resolveHost(host: string): Promise<string[]> {
-  if (isIP(host)) {
-    return [host];
-  }
-
   const result = await lookup(host, { all: true });
   return result.map((entry) => entry.address);
 }
@@ -74,10 +86,8 @@ function isPrivateAddress(ipAddress: string): boolean {
   if (family === 4) {
     return isPrivateIpv4(ipAddress);
   }
-
   if (family === 6) {
     return isPrivateIpv6(ipAddress);
   }
-
   return false;
 }

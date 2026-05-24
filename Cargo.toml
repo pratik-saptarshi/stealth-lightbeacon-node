@@ -1,0 +1,13 @@
+[package]
+name = "stealth-lightbeacon-context-daemon"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+
+[[bin]]
+name = "context-daemon"
+path = "src/backend/daemon.rs"
+
+[dependencies]
+libc = "0.2"
+notify = "6.1"

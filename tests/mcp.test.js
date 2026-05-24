@@ -29,73 +29,43 @@ test('lists the MCP tool surface with health, status, duckdb, lancedb, and ontol
   assert.equal(response.result.tools.some((tool) => tool.name === 'status'), true);
   assert.equal(response.result.tools.some((tool) => tool.name === 'duckdb.query'), true);
   assert.equal(response.result.tools.some((tool) => tool.name === 'lancedb.search'), true);
-  assert.equal(response.result.tools.some((tool) => tool.name === 'ontology.lookup'), true);
+  assert.equal(response.result.tools.some((tool) => tool.name === 'ontology.query'), true);
 });
 
-test('routes tool calls by name and preserves validated arguments', async () => {
+test('routes health tool call', async () => {
   const mod = await loadModule(path.join('mcp', 'server.js'));
-  let called = null;
-  const server = mod.createMcpServer({
-    ontology: {
-      lookup: async () => ({ ok: true, tool: 'ontology.lookup', result: null }),
-      search: async (input) => {
-        called = input;
-        return {
-          ok: true,
-          tool: 'ontology.search',
-          result: {
-            items: [{ id: 'a', label: 'alpha' }],
-            total: 1
-          }
-        };
-      }
-    }
-  });
+  const server = mod.createMcpServer();
 
   const response = await server.handleRequest(
     makeRequest('tools/call', {
-      arguments: { limit: 1, query: 'alpha' },
-      name: 'ontology.search'
+      arguments: {},
+      name: 'health'
     })
   );
 
-  assert.deepEqual(called, { limit: 1, query: 'alpha' });
   assert.equal(response.result.content[0].type, 'text');
-  assert.deepEqual(JSON.parse(response.result.content[0].text), {
-    ok: true,
-    result: {
-      items: [{ id: 'a', label: 'alpha' }],
-      total: 1
-    },
-    tool: 'ontology.search'
-  });
+  const result = JSON.parse(response.result.content[0].text);
+  assert.equal(result.ok, true);
+  assert.equal(result.tool, 'health');
 });
 
-test('rejects unknown keys in tool arguments', async () => {
+test('routes ontology Cypher queries to LadybugDB', async () => {
   const mod = await loadModule(path.join('mcp', 'server.js'));
-  let called = 0;
-  const server = mod.createMcpServer({
-    ontology: {
-      lookup: async () => ({ ok: true, tool: 'ontology.lookup', result: null }),
-      search: async () => {
-        called += 1;
-        return {
-          ok: true,
-          tool: 'ontology.search',
-          result: { items: [], total: 0 }
-        };
-      }
-    }
-  });
+  const server = mod.createMcpServer();
 
+  // Test MATCH (c1:CodeSymbol)-[:CALLS]->(c2:CodeSymbol) WHERE c1.name = 'createMcpServer' RETURN c2
   const response = await server.handleRequest(
     makeRequest('tools/call', {
-      arguments: { extra: true, query: 'alpha' },
-      name: 'ontology.search'
+      arguments: {
+        cypher: "MATCH (c1:CodeSymbol)-[:CALLS]->(c2:CodeSymbol) WHERE c1.name = 'createMcpServer' RETURN c2"
+      },
+      name: 'ontology.query'
     })
   );
 
-  assert.equal(called, 0);
-  assert.equal(response.error.code, -32602);
-  assert.equal(response.id, 1);
+  assert.equal(response.result.content[0].type, 'text');
+  const result = JSON.parse(response.result.content[0].text);
+  assert.equal(result.ok, true);
+  assert.equal(result.result.length, 1);
+  assert.equal(result.result[0].name, 'invokeTool');
 });

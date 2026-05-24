@@ -1,5 +1,7 @@
 import { SSRFGuard } from '../ssrf';
 import type { CrawledPage } from '../crawler';
+import { BrowserPool } from './browserPool';
+import { requestSecurePinned } from '../fetcher';
 
 export interface ZendriverOptions {
   timeoutMs?: number;
@@ -21,46 +23,55 @@ export class ZendriverEngine {
   }
 
   async scrape(url: string): Promise<CrawledPage> {
-    let playwrightModule: any;
-    try {
-      playwrightModule = await new Function('return import("playwright-core")')();
-    } catch {
-      throw new Error(
-        "Playwright is not installed. Zendriver engine requires the 'playwright-core' package.\n" +
-        "To install it, run: npm install playwright-core"
-      );
-    }
-
     // 1. Pre-fetch SSRF validation
     await this.ssrfGuard.validate(url);
-
     const startTime = Date.now();
-    const browser = await playwrightModule.chromium.launch({
-      headless: true,
-      executablePath: process.env.CHROME_BIN,
-      args: [
-        '--disable-blink-features=AutomationControlled',
-        '--disable-infobars',
-        '--no-sandbox',
-        '--window-size=1920,1080'
-      ]
+    
+    const browser = await BrowserPool.getInstance().getBrowser();
+    const ctx = await browser.newContext({
+      viewport: { width: 1920, height: 1080 },
+      userAgent: this.userAgent,
+      acceptDownloads: false,
+      colorScheme: 'dark',
+      deviceScaleFactor: 1,
+      timezoneId: 'America/New_York'
     });
 
     try {
-      const context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
-        userAgent: this.userAgent,
-        acceptDownloads: false,
-        colorScheme: 'dark',
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isMobile: false,
-        locale: 'en-US',
-        timezoneId: 'America/New_York'
+      // Fulfill every browser request in Node context to enforce dynamic IP pinning and prevent DNS rebinding
+      await ctx.route('**/*', async (route) => {
+        const req = route.request();
+        const reqUrl = req.url();
+        try {
+          await this.ssrfGuard.validate(reqUrl);
+
+          if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://')) {
+            await route.continue();
+            return;
+          }
+
+          const parsed = new URL(reqUrl);
+          const host = parsed.hostname;
+          const pinnedIp = this.ssrfGuard.getPinnedAddress(host);
+
+          const response = await requestSecurePinned(reqUrl, {
+            method: req.method(),
+            headers: req.headers(),
+            pinnedIp: pinnedIp ?? undefined
+          });
+
+          await route.fulfill({
+            status: response.status,
+            headers: response.headers,
+            body: await response.text()
+          });
+        } catch {
+          await route.abort('blockedbyclient');
+        }
       });
 
       // Bypass webdriver detection scripts
-      await context.addInitScript(() => {
+      await ctx.addInitScript(() => {
         // Override webdriver flag
         Object.defineProperty(navigator, 'webdriver', {
           get: () => undefined
@@ -78,23 +89,23 @@ export class ZendriverEngine {
 
         // WebGL Fingerprint Spoofing
         const getParameter = WebGLRenderingContext.prototype.getParameter;
-        WebGLRenderingContext.prototype.getParameter = function (parameter: number) {
+        WebGLRenderingContext.prototype.getParameter = function (param: number) {
           // UNMASKED_VENDOR_WEBGL
-          if (parameter === 37445) {
+          if (param === 37445) {
             return 'Intel Open Source Technology Center';
           }
           // UNMASKED_RENDERER_WEBGL
-          if (parameter === 37446) {
+          if (param === 37446) {
             return 'Mesa DRI Intel(R) HD Graphics 520 (Skylake GT2)';
           }
           return getParameter.apply(this, arguments as any);
         };
       });
 
-      const page = await context.newPage();
+      const page = await ctx.newPage();
 
       // Navigate and wait for content
-      const response = await page.goto(url, {
+      const res = await page.goto(url, {
         waitUntil: 'networkidle',
         timeout: this.timeoutMs
       });
@@ -104,19 +115,19 @@ export class ZendriverEngine {
       await this.ssrfGuard.validate(finalUrl);
 
       const html = await page.content();
-      const headers = response
-        ? (Object.fromEntries(Object.entries(await response.allHeaders()).map(([k, v]) => [k.toLowerCase(), v])) as Record<string, string>)
+      const headers = res
+        ? (Object.fromEntries(Object.entries(await res.allHeaders()).map(([k, v]) => [k.toLowerCase(), v])) as Record<string, string>)
         : {};
 
       return {
         url: finalUrl,
         html,
         headers,
-        status: response?.status() ?? 200,
+        status: res?.status() ?? 200,
         responseTimeMs: Date.now() - startTime
       };
     } finally {
-      await browser.close();
+      await ctx.close();
     }
   }
 }

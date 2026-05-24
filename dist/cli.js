@@ -17,6 +17,7 @@ const pagespeed_1 = require("./core/pagespeed");
 const budget_1 = require("./core/budget");
 const ssrf_1 = require("./core/ssrf");
 const ontology_1 = require("./core/ontology");
+const browserPool_1 = require("./core/scraping/browserPool");
 const DEFAULT_OUTPUT_DIR = 'reports';
 async function main() {
     const program = new commander_1.Command();
@@ -198,6 +199,7 @@ async function evaluateCommand(rawUrl, rawOptions) {
     finally {
         await pageSpeedService?.close();
         await ontologyStore?.close();
+        await browserPool_1.BrowserPool.getInstance().close();
     }
 }
 async function checkBrokenLinks(startUrl, fetchPage) {

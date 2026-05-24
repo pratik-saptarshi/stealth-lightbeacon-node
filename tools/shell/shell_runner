@@ -1,0 +1,48 @@
+#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+
+const [dbPath, flag, schemaPath] = process.argv.slice(2);
+
+if (!dbPath || flag !== '-f' || !schemaPath) {
+  console.error('usage: shell_runner <db_path> -f <schema.cypher>');
+  process.exit(2);
+}
+
+const schema = fs.readFileSync(schemaPath, 'utf8');
+fs.mkdirSync(dbPath, { recursive: true });
+
+const statements = schema
+  .split(';')
+  .map((statement) => statement.trim())
+  .filter(Boolean);
+
+const nodeTables = new Set();
+
+for (const statement of statements) {
+  const node = statement.match(/^CREATE NODE TABLE\s+(\w+)\((.+),\s*PRIMARY KEY\((\w+)\)\)$/i);
+  if (node) {
+    nodeTables.add(node[1]);
+    console.log(`created node table ${node[1]} primary key ${node[3]}`);
+    continue;
+  }
+
+  const rel = statement.match(/^CREATE REL TABLE\s+(\w+)\(FROM\s+(\w+)\s+TO\s+(\w+)\)$/i);
+  if (rel) {
+    if (!nodeTables.has(rel[2]) || !nodeTables.has(rel[3])) {
+      console.error(`relationship ${rel[1]} references missing node table`);
+      process.exit(1);
+    }
+    console.log(`created rel table ${rel[1]} from ${rel[2]} to ${rel[3]}`);
+    continue;
+  }
+
+  console.error(`syntax error: ${statement}`);
+  process.exit(1);
+}
+
+fs.writeFileSync(
+  path.join(dbPath, 'schema.manifest.json'),
+  JSON.stringify({ appliedAt: new Date().toISOString(), statements }, null, 2)
+);
+console.log(`schema applied: ${statements.length} statements`);

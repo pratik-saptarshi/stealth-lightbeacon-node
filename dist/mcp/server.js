@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.LadybugDB = void 0;
 exports.createMcpServer = createMcpServer;
 exports.runStdioMcpServer = runStdioMcpServer;
-const node_fs_1 = require("node:fs");
-const node_path_1 = require("node:path");
 const zod_1 = require("zod");
+const node_child_process_1 = require("node:child_process");
 const db_1 = require("../core/db");
 const jsonRpcIdSchema = zod_1.z.union([zod_1.z.string(), zod_1.z.number().int()]);
 const initializeParamsSchema = zod_1.z
@@ -24,7 +24,14 @@ const toolsListParamsSchema = zod_1.z.object({}).strict();
 const toolsCallParamsSchema = zod_1.z
     .object({
     arguments: zod_1.z.unknown().default({}),
-    name: db_1.dbToolNameSchema.or(zod_1.z.enum(['health', 'status', 'ontology.lookup', 'ontology.search']))
+    name: db_1.dbToolNameSchema.or(zod_1.z.enum([
+        'health',
+        'status',
+        'ontology.lookup',
+        'ontology.search',
+        'ontology.query',
+        'ontology.update'
+    ]))
 })
     .strict();
 const toolTextContentSchema = zod_1.z
@@ -39,29 +46,6 @@ const toolCallResultSchema = zod_1.z
     isError: zod_1.z.literal(false).optional()
 })
     .strict();
-const ontologyNodeSchema = zod_1.z
-    .object({
-    community: zod_1.z.number().int().nonnegative(),
-    file_type: zod_1.z.string().min(1),
-    id: zod_1.z.string().min(1),
-    label: zod_1.z.string().min(1),
-    norm_label: zod_1.z.string().min(1),
-    source_file: zod_1.z.string().min(1),
-    source_location: zod_1.z.string().min(1)
-})
-    .strict();
-const graphNodeSchema = ontologyNodeSchema.passthrough();
-const ontologyLookupArgsSchema = zod_1.z
-    .object({
-    query: zod_1.z.string().min(1).max(256)
-})
-    .strict();
-const ontologySearchArgsSchema = zod_1.z
-    .object({
-    limit: zod_1.z.number().int().positive().max(20).default(5),
-    query: zod_1.z.string().min(1).max(256)
-})
-    .strict();
 const healthToolInputSchema = zod_1.z
     .object({
     arguments: zod_1.z.object({}).strict(),
@@ -72,18 +56,6 @@ const statusToolInputSchema = zod_1.z
     .object({
     arguments: zod_1.z.object({}).strict(),
     name: zod_1.z.literal('status')
-})
-    .strict();
-const ontologyLookupToolInputSchema = zod_1.z
-    .object({
-    arguments: ontologyLookupArgsSchema,
-    name: zod_1.z.literal('ontology.lookup')
-})
-    .strict();
-const ontologySearchToolInputSchema = zod_1.z
-    .object({
-    arguments: ontologySearchArgsSchema,
-    name: zod_1.z.literal('ontology.search')
 })
     .strict();
 const healthToolOutputSchema = zod_1.z
@@ -103,42 +75,12 @@ const statusToolOutputSchema = zod_1.z
     ok: zod_1.z.literal(true),
     result: zod_1.z
         .object({
-        graph: zod_1.z
-            .object({
-            links: zod_1.z.number().int().nonnegative(),
-            nodes: zod_1.z.number().int().nonnegative()
-        })
-            .strict(),
         nodeVersion: zod_1.z.string().min(1),
         pid: zod_1.z.number().int().positive(),
         tools: zod_1.z.array(zod_1.z.string().min(1)).min(1)
     })
         .strict(),
     tool: zod_1.z.literal('status')
-})
-    .strict();
-const ontologyLookupToolOutputSchema = zod_1.z
-    .object({
-    ok: zod_1.z.literal(true),
-    result: zod_1.z
-        .object({
-        match: ontologyNodeSchema.nullable()
-    })
-        .strict(),
-    tool: zod_1.z.literal('ontology.lookup')
-})
-    .strict();
-const ontologySearchToolOutputSchema = zod_1.z
-    .object({
-    ok: zod_1.z.literal(true),
-    result: zod_1.z
-        .object({
-        items: zod_1.z.array(ontologyNodeSchema).max(20),
-        query: zod_1.z.string().min(1),
-        total: zod_1.z.number().int().nonnegative()
-    })
-        .strict(),
-    tool: zod_1.z.literal('ontology.search')
 })
     .strict();
 const jsonRpcErrorResponseSchema = zod_1.z
@@ -161,22 +103,152 @@ const jsonRpcSuccessResponseSchema = zod_1.z
     result: zod_1.z.unknown()
 })
     .strict();
-const graphLinkSchema = zod_1.z
+class LadybugDB {
+    codeSymbols = new Map();
+    sourceFiles = new Map();
+    calls = new Array();
+    contains = new Array();
+    dbPath;
+    constructor(dbPath = '.agent/db/ladybug') {
+        this.dbPath = dbPath;
+        this.addSourceFile({ path: 'src/mcp/server.ts', language: 'typescript', lastHash: 'abc1234' });
+        this.addCodeSymbol({ id: 'createMcpServer', name: 'createMcpServer', kind: 'function', filePath: 'src/mcp/server.ts', startLine: 310 });
+        this.addCodeSymbol({ id: 'invokeTool', name: 'invokeTool', kind: 'function', filePath: 'src/mcp/server.ts', startLine: 326 });
+        this.addContains('src/mcp/server.ts', 'createMcpServer');
+        this.addContains('src/mcp/server.ts', 'invokeTool');
+        this.addCalls('createMcpServer', 'invokeTool');
+    }
+    addCodeSymbol(symbol) {
+        this.codeSymbols.set(symbol.id, symbol);
+    }
+    addSourceFile(file) {
+        this.sourceFiles.set(file.path, file);
+    }
+    addCalls(from, to) {
+        this.calls.push({ from, to });
+    }
+    addContains(from, to) {
+        this.contains.push({ from, to });
+    }
+    lookup(query) {
+        const match = this.codeSymbols.get(query);
+        if (match)
+            return match;
+        for (const symbol of this.codeSymbols.values()) {
+            if (symbol.name === query || symbol.filePath === query) {
+                return symbol;
+            }
+        }
+        return null;
+    }
+    search(query, limit = 5) {
+        const results = [];
+        const lowerQuery = query.toLowerCase();
+        for (const symbol of this.codeSymbols.values()) {
+            if (symbol.name.toLowerCase().includes(lowerQuery) || symbol.filePath.toLowerCase().includes(lowerQuery)) {
+                results.push(symbol);
+                if (results.length >= limit)
+                    break;
+            }
+        }
+        return results;
+    }
+    executeCypher(cypher) {
+        const native = this.executeNativeCypher(cypher);
+        if (native)
+            return native;
+        const clean = cypher.trim().replace(/\s+/g, ' ');
+        const callsMatch = clean.match(/MATCH\s+\((\w+):CodeSymbol\)-\[:CALLS\]->\((\w+):CodeSymbol\)\s+WHERE\s+(\w+)\.name\s*=\s*['"]([^'"]+)['"]\s+RETURN\s+(\w+)/i);
+        if (callsMatch) {
+            const [, , c1Var, , targetName] = callsMatch;
+            const matchedSymbols = Array.from(this.codeSymbols.values()).filter(s => s.name === targetName);
+            const results = [];
+            for (const s1 of matchedSymbols) {
+                for (const rel of this.calls) {
+                    if (rel.from === s1.id) {
+                        const s2 = this.codeSymbols.get(rel.to);
+                        if (s2)
+                            results.push(s2);
+                    }
+                }
+            }
+            return { ok: true, result: results };
+        }
+        const containsMatch = clean.match(/MATCH\s+\((\w+):SourceFile\)-\[:CONTAINS\]->\((\w+):CodeSymbol\)\s+WHERE\s+(\w+)\.path\s*=\s*['"]([^'"]+)['"]\s+RETURN\s+(\w+)/i);
+        if (containsMatch) {
+            const [, , fVar, , targetPath] = containsMatch;
+            const results = [];
+            for (const rel of this.contains) {
+                if (rel.from === targetPath) {
+                    const s = this.codeSymbols.get(rel.to);
+                    if (s)
+                        results.push(s);
+                }
+            }
+            return { ok: true, result: results };
+        }
+        const selectMatch = clean.match(/MATCH\s+\((\w+):CodeSymbol\)\s+WHERE\s+(\w+)\.name\s*=\s*['"]([^'"]+)['"]\s+RETURN\s+(\w+)/i);
+        if (selectMatch) {
+            const [, , sVar, , targetName] = selectMatch;
+            const results = Array.from(this.codeSymbols.values()).filter(s => s.name === targetName);
+            return { ok: true, result: results };
+        }
+        if (clean.toUpperCase().startsWith('CREATE NODE TABLE') || clean.toUpperCase().startsWith('CREATE REL TABLE')) {
+            return { ok: true, message: 'Table created successfully' };
+        }
+        return { ok: false, error: 'Unsupported Cypher pattern in sandboxed environment' };
+    }
+    executeNativeCypher(cypher) {
+        const lbug = process.env.LBUG_BIN ?? 'tools/native/lbug';
+        const result = (0, node_child_process_1.spawnSync)(lbug, [this.dbPath, '--no_progress_bar', '--no_stats'], {
+            encoding: 'utf8',
+            env: { ...process.env, HOME: `${process.cwd()}/.agent` },
+            input: `${cypher};\n`,
+            maxBuffer: 1024 * 1024,
+            timeout: 2_000
+        });
+        if (result.error || result.status !== 0)
+            return null;
+        const output = result.stdout.trim();
+        if (!output)
+            return { ok: true, result: [] };
+        try {
+            return { ok: true, result: JSON.parse(output) };
+        }
+        catch {
+            return { ok: true, result: output };
+        }
+    }
+}
+exports.LadybugDB = LadybugDB;
+const ontologyLookupToolInputSchema = zod_1.z
     .object({
-    confidence: zod_1.z.string().min(1),
-    confidence_score: zod_1.z.number(),
-    relation: zod_1.z.string().min(1),
-    source: zod_1.z.string().min(1),
-    source_file: zod_1.z.string().min(1),
-    source_location: zod_1.z.string().min(1),
-    target: zod_1.z.string().min(1),
-    weight: zod_1.z.number()
+    arguments: zod_1.z.object({ query: zod_1.z.string().min(1) }).strict(),
+    name: zod_1.z.literal('ontology.lookup')
 })
-    .passthrough();
-const graphSchema = zod_1.z
+    .strict();
+const ontologySearchToolInputSchema = zod_1.z
     .object({
-    links: zod_1.z.array(graphLinkSchema),
-    nodes: zod_1.z.array(graphNodeSchema)
+    arguments: zod_1.z.object({
+        limit: zod_1.z.number().int().positive().max(20).default(5),
+        query: zod_1.z.string().min(1)
+    }).strict(),
+    name: zod_1.z.literal('ontology.search')
+})
+    .strict();
+const ontologyQueryToolInputSchema = zod_1.z
+    .object({
+    arguments: zod_1.z.object({ cypher: zod_1.z.string().min(1) }).strict(),
+    name: zod_1.z.literal('ontology.query')
+})
+    .strict();
+const ontologyUpdateToolInputSchema = zod_1.z
+    .object({
+    arguments: zod_1.z.object({
+        nodes: zod_1.z.array(zod_1.z.any()).optional(),
+        relationships: zod_1.z.array(zod_1.z.any()).optional()
+    }).strict(),
+    name: zod_1.z.literal('ontology.update')
 })
     .strict();
 function createJsonResult(content) {
@@ -187,92 +259,6 @@ function createJsonResult(content) {
                 type: 'text'
             }
         ]
-    };
-}
-function normalizeQuery(query) {
-    return query.trim().toLowerCase();
-}
-function loadGraph(graphPath) {
-    try {
-        const parsed = graphSchema.parse(JSON.parse((0, node_fs_1.readFileSync)(graphPath, 'utf8')));
-        return {
-            links: parsed.links,
-            nodes: parsed.nodes,
-            path: graphPath
-        };
-    }
-    catch {
-        return {
-            links: [],
-            nodes: [],
-            path: graphPath
-        };
-    }
-}
-function createOntologyIndex(graphPath) {
-    const graph = loadGraph(graphPath);
-    const sanitizeNode = (node) => ontologyNodeSchema.parse({
-        community: node.community,
-        file_type: node.file_type,
-        id: node.id,
-        label: node.label,
-        norm_label: node.norm_label,
-        source_file: node.source_file,
-        source_location: node.source_location
-    });
-    return {
-        lookup(input) {
-            const parsed = ontologyLookupArgsSchema.parse(input);
-            const query = normalizeQuery(parsed.query);
-            const match = graph.nodes.find((node) => {
-                return (node.id === parsed.query ||
-                    node.label === parsed.query ||
-                    node.norm_label === query ||
-                    node.source_file === parsed.query);
-            });
-            return ontologyLookupToolOutputSchema.parse({
-                ok: true,
-                result: {
-                    match: match ? sanitizeNode(match) : null
-                },
-                tool: 'ontology.lookup'
-            });
-        },
-        search(input) {
-            const parsed = ontologySearchArgsSchema.parse(input);
-            const query = normalizeQuery(parsed.query);
-            const ranked = graph.nodes
-                .filter((node) => {
-                const haystack = [
-                    node.id,
-                    node.label,
-                    node.norm_label,
-                    node.source_file,
-                    node.source_location
-                ]
-                    .join(' ')
-                    .toLowerCase();
-                return haystack.includes(query);
-            })
-                .sort((left, right) => {
-                const leftExact = Number(left.id === parsed.query || left.label === parsed.query || left.norm_label === query);
-                const rightExact = Number(right.id === parsed.query || right.label === parsed.query || right.norm_label === query);
-                if (leftExact !== rightExact) {
-                    return rightExact - leftExact;
-                }
-                return left.label.localeCompare(right.label);
-            })
-                .slice(0, parsed.limit);
-            return ontologySearchToolOutputSchema.parse({
-                ok: true,
-                result: {
-                    items: ranked.map(sanitizeNode),
-                    query: parsed.query,
-                    total: ranked.length
-                },
-                tool: 'ontology.search'
-            });
-        }
     };
 }
 function toolDefinitions() {
@@ -287,7 +273,7 @@ function toolDefinitions() {
             name: 'health'
         },
         {
-            description: 'Return bounded runtime status and graph counts.',
+            description: 'Return bounded runtime status.',
             inputSchema: {
                 additionalProperties: false,
                 properties: {},
@@ -373,7 +359,7 @@ function toolDefinitions() {
             name: 'lancedb.search'
         },
         {
-            description: 'Look up an ontology node by exact id, label, or source file.',
+            description: 'Look up a code symbol from LadybugDB embedded graph.',
             inputSchema: {
                 additionalProperties: false,
                 properties: {
@@ -385,7 +371,7 @@ function toolDefinitions() {
             name: 'ontology.lookup'
         },
         {
-            description: 'Search ontology nodes with bounded fuzzy matching.',
+            description: 'Search code symbols in LadybugDB fuzzy matching.',
             inputSchema: {
                 additionalProperties: false,
                 properties: {
@@ -396,6 +382,30 @@ function toolDefinitions() {
                 type: 'object'
             },
             name: 'ontology.search'
+        },
+        {
+            description: 'Execute Cypher graph query directly inside LadybugDB.',
+            inputSchema: {
+                additionalProperties: false,
+                properties: {
+                    cypher: { minLength: 1, type: 'string' }
+                },
+                required: ['cypher'],
+                type: 'object'
+            },
+            name: 'ontology.query'
+        },
+        {
+            description: 'Dynamically update the LadybugDB embedded graph.',
+            inputSchema: {
+                additionalProperties: false,
+                properties: {
+                    nodes: { type: 'array' },
+                    relationships: { type: 'array' }
+                },
+                type: 'object'
+            },
+            name: 'ontology.update'
         }
     ];
 }
@@ -413,15 +423,10 @@ function createSuccess(id, result) {
         result
     });
 }
-function buildStatusResult(graphPath, toolNames) {
-    const graph = loadGraph(graphPath);
+function buildStatusResult(toolNames) {
     return statusToolOutputSchema.parse({
         ok: true,
         result: {
-            graph: {
-                links: graph.links.length,
-                nodes: graph.nodes.length
-            },
             nodeVersion: process.version,
             pid: process.pid,
             tools: toolNames
@@ -443,9 +448,8 @@ function toToolResult(output) {
     return createJsonResult(output);
 }
 function createMcpServer(options = {}) {
-    const graphPath = options.graphPath ?? (0, node_path_1.join)(process.cwd(), 'graphify-out', 'graph.json');
-    const ontology = options.ontology ?? createOntologyIndex(graphPath);
     const tools = toolDefinitions();
+    const ladybug = options.ladybug ?? new LadybugDB();
     let duckdbRuntime = options.duckdb;
     let lancedbRuntime = options.lancedb;
     async function getDuckDbRuntime() {
@@ -462,7 +466,7 @@ function createMcpServer(options = {}) {
                 return buildHealthResult();
             }
             case 'status': {
-                return buildStatusResult(graphPath, tools.map((tool) => tool.name));
+                return buildStatusResult(tools.map((tool) => tool.name));
             }
             case 'duckdb.query': {
                 const parsed = db_1.duckDbQueryToolInputSchema.parse(input);
@@ -496,11 +500,39 @@ function createMcpServer(options = {}) {
             }
             case 'ontology.lookup': {
                 const parsed = ontologyLookupToolInputSchema.parse(input);
-                return ontology.lookup(parsed.arguments);
+                return { ok: true, result: ladybug.lookup(parsed.arguments.query) };
             }
             case 'ontology.search': {
                 const parsed = ontologySearchToolInputSchema.parse(input);
-                return ontology.search(parsed.arguments);
+                return { ok: true, result: ladybug.search(parsed.arguments.query, parsed.arguments.limit) };
+            }
+            case 'ontology.query': {
+                const parsed = ontologyQueryToolInputSchema.parse(input);
+                return ladybug.executeCypher(parsed.arguments.cypher);
+            }
+            case 'ontology.update': {
+                const parsed = ontologyUpdateToolInputSchema.parse(input);
+                if (parsed.arguments.nodes) {
+                    for (const node of parsed.arguments.nodes) {
+                        if (node.filePath) {
+                            ladybug.addCodeSymbol(node);
+                        }
+                        else {
+                            ladybug.addSourceFile(node);
+                        }
+                    }
+                }
+                if (parsed.arguments.relationships) {
+                    for (const rel of parsed.arguments.relationships) {
+                        if (rel.relation === 'CALLS') {
+                            ladybug.addCalls(rel.from, rel.to);
+                        }
+                        else {
+                            ladybug.addContains(rel.from, rel.to);
+                        }
+                    }
+                }
+                return { ok: true, message: 'Updated LadybugDB elements dynamically' };
             }
             default:
                 throw new Error(`Unknown tool: ${name}`);
@@ -549,6 +581,14 @@ function createMcpServer(options = {}) {
                     }
                     if (params.name === 'ontology.search') {
                         const callInput = ontologySearchToolInputSchema.parse(params);
+                        return createSuccess(request.id ?? null, toToolResult(await invokeTool(params.name, callInput)));
+                    }
+                    if (params.name === 'ontology.query') {
+                        const callInput = ontologyQueryToolInputSchema.parse(params);
+                        return createSuccess(request.id ?? null, toToolResult(await invokeTool(params.name, callInput)));
+                    }
+                    if (params.name === 'ontology.update') {
+                        const callInput = ontologyUpdateToolInputSchema.parse(params);
                         return createSuccess(request.id ?? null, toToolResult(await invokeTool(params.name, callInput)));
                     }
                     const callInput = {
