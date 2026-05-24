@@ -1,0 +1,61 @@
+{
+  "name": "stealth-lightbeacon-node",
+  "version": "2.0.0",
+  "description": "TypeScript crawl orchestration, MCP tools, and multi-domain site auditing with security checks, SEO, AEO, GEO, and performance reporting",
+  "main": "dist/index.js",
+  "bin": {
+    "stealth-lightbeacon": "dist/cli.js",
+    "stealth-lightbeacon-mcp": "dist/mcp/stdio.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "prepack": "npm run build",
+    "pack:dry": "npm pack --dry-run",
+    "audit:signatures": "npm audit signatures",
+    "pretest": "npm run build",
+    "test": "node --test tests/*.test.js",
+    "coverage": "node --experimental-test-coverage --test tests/*.test.js",
+    "test:watch": "node --test --watch tests/*.test.js",
+    "start": "npm run build && node dist/cli.js",
+    "mcp": "npm run build && node dist/mcp/stdio.js"
+  },
+  "keywords": [
+    "drupal",
+    "seo",
+    "audit",
+    "performance",
+    "aeo",
+    "geo",
+    "crawler",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md",
+    "readme.md",
+    "LICENSE",
+    "SECURITY.md",
+    ".env.example"
+  ],
+  "dependencies": {
+    "@duckdb/node-api": "^1.5.3-r.1",
+    "@lancedb/lancedb": "^0.29.0",
+    "cheerio": "^1.0.0-rc.12",
+    "commander": "^11.1.0",
+    "handlebars": "^4.7.8",
+    "lighthouse": "^11.4.0",
+    "ora": "^7.0.1",
+    "playwright-core": "^1.55.0",
+    "robots-parser": "^3.0.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

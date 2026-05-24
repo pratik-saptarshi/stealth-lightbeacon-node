@@ -1,0 +1,25 @@
+{
+  "name": "Stealth Lightbeacon Node",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "node",
+  "runArgs": [
+    "--shm-size=1g"
+  ],
+  "containerEnv": {
+    "CHROME_BIN": "/usr/bin/chromium",
+    "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "forwardPorts": [3000]
+}

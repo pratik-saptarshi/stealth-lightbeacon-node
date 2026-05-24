@@ -1,0 +1,119 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PageSpeedService = void 0;
+const cache_1 = require("./cache");
+const schemas_1 = require("./db/schemas");
+const PAGE_SPEED_API_URL = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
+const DEFAULT_CACHE_PATH = '.cache/pagespeed.duckdb';
+const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+class PageSpeedService {
+    cacheTtlMs;
+    cachePath;
+    cache;
+    cachePromise = null;
+    constructor(options = {}) {
+        this.cache = options.cache;
+        this.cachePath = options.cachePath ?? DEFAULT_CACHE_PATH;
+        this.cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
+    }
+    async getSummary(url, apiKey) {
+        const cache = await this.getCache();
+        const cached = await cache.get(url, this.cacheTtlMs);
+        if (cached) {
+            return cached;
+        }
+        if (!apiKey) {
+            return null;
+        }
+        const apiUrl = new URL(PAGE_SPEED_API_URL);
+        apiUrl.searchParams.set('url', url);
+        apiUrl.searchParams.set('key', apiKey);
+        apiUrl.searchParams.set('category', 'PERFORMANCE');
+        apiUrl.searchParams.set('strategy', 'mobile');
+        let payload = null;
+        let lastError = null;
+        let delay = 1000;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const res = await fetch(apiUrl, { method: 'GET' });
+                if (res.status === 429) {
+                    throw new Error('HTTP 429 Rate Limited');
+                }
+                if (!res.ok) {
+                    throw new Error(`PageSpeed API failed with HTTP ${res.status}`);
+                }
+                payload = (await res.json());
+                break;
+            }
+            catch (err) {
+                lastError = err;
+                if (attempt < 3) {
+                    await new Promise((resolve) => setTimeout(resolve, delay));
+                    delay *= 2;
+                }
+            }
+        }
+        if (!payload) {
+            throw lastError ?? new Error('PageSpeed request failed');
+        }
+        const lighthouseResult = payload.lighthouseResult;
+        const audits = (lighthouseResult?.audits ?? {});
+        const loadingExperience = payload.loadingExperience;
+        const metrics = loadingExperience?.metrics;
+        const lcpPercentile = extractPercentile(metrics, 'LARGEST_CONTENTFUL_PAINT_MS');
+        const clsPercentile = extractPercentile(metrics, 'CUMULATIVE_LAYOUT_SHIFT_SCORE');
+        const inpPercentile = extractPercentile(metrics, 'INTERACTION_TO_NEXT_PAINT');
+        const ttfbPercentile = extractPercentile(metrics, 'EXPERIMENTAL_TIME_TO_FIRST_BYTE');
+        const summary = schemas_1.pageSpeedSummarySchema.parse({
+            lighthousePerformanceScore: extractPerformanceScore(lighthouseResult),
+            cwv: {
+                lcp: extractDisplayValue(audits, 'largest-contentful-paint'),
+                inp: extractDisplayValue(audits, 'interaction-to-next-paint'),
+                cls: extractDisplayValue(audits, 'cumulative-layout-shift')
+            },
+            lcpMs: lcpPercentile,
+            clsScore: clsPercentile !== undefined ? clsPercentile / 100 : undefined,
+            inpMs: inpPercentile,
+            ttfbMs: ttfbPercentile
+        });
+        await cache.set(url, summary);
+        return summary;
+    }
+    async close() {
+        if (this.cache) {
+            await this.cache.close();
+            return;
+        }
+        if (this.cachePromise) {
+            const cache = await this.cachePromise;
+            await cache.close();
+            this.cachePromise = null;
+        }
+    }
+    async getCache() {
+        if (this.cache) {
+            return this.cache;
+        }
+        if (!this.cachePromise) {
+            this.cachePromise = Promise.resolve(new cache_1.DuckDbJsonCache(this.cachePath, schemas_1.pageSpeedSummarySchema));
+        }
+        return this.cachePromise;
+    }
+}
+exports.PageSpeedService = PageSpeedService;
+function extractPerformanceScore(lighthouseResult) {
+    const categories = lighthouseResult?.categories;
+    const performance = categories?.performance;
+    const score = performance?.score;
+    return typeof score === 'number' ? Math.round(score * 100) : undefined;
+}
+function extractDisplayValue(audits, auditName) {
+    const audit = audits[auditName];
+    const displayValue = audit?.displayValue;
+    return typeof displayValue === 'string' ? displayValue : undefined;
+}
+function extractPercentile(metrics, metricName) {
+    const metric = metrics?.[metricName];
+    const percentile = metric?.percentile;
+    return typeof percentile === 'number' ? percentile : undefined;
+}

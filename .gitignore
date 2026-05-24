@@ -1,0 +1,26 @@
+node_modules/
+coverage/
+.cache/
+.data/
+.tmp/
+.tmp-*
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.*
+!.env.example
+
+# Generated audit and release-review artifacts
+report.json
+report.html
+report.pdf
+reports/
+graphify-out/
+integration_log.jsonl
+review_report.*
+review_panel_report.*
+*.tgz
