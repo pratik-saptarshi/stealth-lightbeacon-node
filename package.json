@@ -1,6 +1,6 @@
 {
   "name": "stealth-lightbeacon-node",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "TypeScript crawl orchestration, MCP tools, and multi-domain site auditing with security checks, SEO, AEO, GEO, and performance reporting",
   "main": "dist/index.js",
   "bin": {
@@ -56,6 +56,6 @@
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   }
 }
