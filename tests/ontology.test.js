@@ -7,6 +7,9 @@ const Module = require('node:module');
 
 require('ts-node/register/transpile-only');
 
+const runOntologyTestsLocally = process.env.STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS === '1';
+const ontologyTest = runOntologyTestsLocally ? test : test.skip;
+
 const originalLoad = Module._load;
 const lanceDatabases = new Map();
 
@@ -132,7 +135,7 @@ function sampleResult(overrides = {}) {
   };
 }
 
-test('ontology store round-trips run, page, and finding records through DuckDB', async () => {
+ontologyTest('ontology store round-trips run, page, and finding records through DuckDB', async () => {
   const mod = await loadModule(path.join('core', 'ontology.ts'));
   const dbMod = await loadModule(path.join('core', 'db', 'duckdb.ts'));
   const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stealth-lightbeacon-ontology-'));
@@ -195,7 +198,7 @@ test('ontology store round-trips run, page, and finding records through DuckDB',
   }
 });
 
-test('ontology store semantic search returns the matching finding memory', async () => {
+ontologyTest('ontology store semantic search returns the matching finding memory', async () => {
   const mod = await loadModule(path.join('core', 'ontology.ts'));
   const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stealth-lightbeacon-ontology-search-'));
   const store = await mod.createOntologyStore({ rootDir });

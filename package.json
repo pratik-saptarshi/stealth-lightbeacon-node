@@ -1,6 +1,6 @@
 {
   "name": "stealth-lightbeacon-node",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "TypeScript crawl orchestration, MCP tools, and multi-domain site auditing with security checks, SEO, AEO, GEO, and performance reporting",
   "main": "dist/index.js",
   "bin": {
@@ -16,6 +16,7 @@
     "audit:signatures": "npm audit signatures",
     "pretest": "npm run build",
     "test": "node --test tests/*.test.js",
+    "test:ontology:local": "STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 node --test tests/ontology.test.js",
     "coverage": "node --experimental-test-coverage --test tests/*.test.js",
     "coverage:check": "node tools/check-coverage.js",
     "quality:check": "npm run typecheck && npm run test && npm run coverage:check",
