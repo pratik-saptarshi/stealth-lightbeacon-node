@@ -102,3 +102,9 @@ Evaluators follow a standardized functional interface, executing parallel analys
 - **`GeoEvaluator` / `AeoEvaluator`**: Factoring authority checks, trustworthy outbound citations (mapping to academic `.edu`/`.gov` structures), author profile completeness, and keyword density.
 - **`UxEvaluator`**: Typography dimensions checks, viewports configuration, tap target paddings, and menu structures.
 - **`DrupalSecurityEvaluator`**: Exposed generator tags, public paths vulnerability, insecure session cookie configs, and security headers.
+
+---
+
+## 5. CI/CD Integration
+
+`stealth-lightbeacon-node` is designed to be embedded directly into deployment pipelines. It provides pre-built integration recipes (`.github/workflows/`, `.gitlab-ci.yml`, `bitbucket-pipelines.yml`) to enforce budget thresholds (Performance, SEO, AEO, UX, Accessibility) before production rollouts, enabling continuous security and quality auditing.

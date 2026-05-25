@@ -114,6 +114,15 @@ Coverage thresholds are enforced by `npm run coverage:check`:
 - branch coverage >= `65%`
 - function coverage >= `75%`
 
+## CI/CD Integration
+
+Pre-built CI/CD configuration files are provided to run `stealth-lightbeacon-node` as part of your continuous integration and deployment pipelines. They are located in the repository root:
+- **GitHub Actions**: `.github/workflows/`
+- **GitLab CI**: `.gitlab-ci.yml`
+- **Bitbucket Pipelines**: `bitbucket-pipelines.yml`
+
+These recipes run a configurable subset of audits on a specified URL, failing the pipeline if critical performance, security, or accessibility issues are found.
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE).

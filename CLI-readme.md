@@ -131,7 +131,16 @@ Interpretation guidance:
 - `build` and `audit:signatures` should pass.
 - `test` and `coverage:check` can fail in sandboxed/macOS-restricted environments due to browser launch permissions or DNS/network restrictions; treat these as environment-constrained failures when failure signatures match known patterns.
 
-## 6. Recently Successful Commands (Validated in this Workspace)
+## 6. CI/CD Integration
+
+For automated runs, utilize the pre-built pipeline configurations:
+- **GitHub Actions**: `.github/workflows/`
+- **GitLab CI**: `.gitlab-ci.yml`
+- **Bitbucket Pipelines**: `bitbucket-pipelines.yml`
+
+These recipes are configured to execute `stealth-lightbeacon-node` against a staging or production URL, failing the pipeline if configured budgets are exceeded.
+
+## 7. Recently Successful Commands (Validated in this Workspace)
 
 Date context: `2026-05-24` (local workspace session)
 
