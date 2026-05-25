@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as dns from 'node:dns';
+import { isIP } from 'node:net';
 import type { CrawledPage } from './crawler';
 import { SSRFGuard } from './ssrf';
 import { createScraper } from './scraping/factory';
@@ -44,12 +45,23 @@ export function requestSecurePinned(
       rejectUnauthorized: true
     };
 
-    if (options.pinnedIp) {
+    const pinnedIp = options.pinnedIp;
+    const pinnedFamily = pinnedIp ? isIP(pinnedIp) : 0;
+    if (pinnedFamily > 0) {
       reqOptions.lookup = (hostname, opts, callback) => {
+        const wantsAll = typeof opts === 'object' && opts !== null && 'all' in opts && Boolean(opts.all);
         if (hostname === host) {
-          callback(null, options.pinnedIp!, 4);
+          if (wantsAll) {
+            callback(null, [{ address: pinnedIp!, family: pinnedFamily }]);
+            return;
+          }
+          callback(null, pinnedIp!, pinnedFamily);
         } else {
-          dns.lookup(hostname, opts, callback);
+          if (wantsAll) {
+            dns.lookup(hostname, normalizeLookupAllOptions(opts), callback);
+            return;
+          }
+          dns.lookup(hostname, normalizeLookupOptions(opts), callback);
         }
       };
     }
@@ -81,6 +93,30 @@ export function requestSecurePinned(
 
     req.end();
   });
+}
+
+function normalizeLookupOptions(
+  opts: number | dns.LookupOneOptions | dns.LookupAllOptions
+): dns.LookupOneOptions {
+  if (typeof opts === 'number') {
+    return { family: opts };
+  }
+  return {
+    family: opts.family,
+    hints: opts.hints,
+    verbatim: opts.verbatim
+  };
+}
+
+function normalizeLookupAllOptions(
+  opts: dns.LookupOneOptions | dns.LookupAllOptions
+): dns.LookupAllOptions {
+  return {
+    family: opts.family,
+    hints: opts.hints,
+    verbatim: opts.verbatim,
+    all: true
+  };
 }
 
 export async function fetchHttpPage(

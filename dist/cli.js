@@ -101,6 +101,7 @@ async function evaluateCommand(rawUrl, rawOptions) {
             allowPrivate: options.allowPrivate,
             engine: options.render ? 'rendered' : options.engine
         });
+        (0, node_fs_1.mkdirSync)((0, node_path_1.join)(options.outputDir, '.cache'), { recursive: true });
         pageSpeedService = new pagespeed_1.PageSpeedService({
             cachePath: (0, node_path_1.join)(options.outputDir, '.cache', 'pagespeed.duckdb')
         });

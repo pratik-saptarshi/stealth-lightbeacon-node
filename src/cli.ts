@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command } from 'commander';
 import ora from 'ora';
@@ -107,6 +107,7 @@ async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknow
       allowPrivate: options.allowPrivate,
       engine: options.render ? 'rendered' : options.engine
     });
+    mkdirSync(join(options.outputDir, '.cache'), { recursive: true });
     pageSpeedService = new PageSpeedService({
       cachePath: join(options.outputDir, '.cache', 'pagespeed.duckdb')
     });

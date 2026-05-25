@@ -41,6 +41,7 @@ const cheerio = __importStar(require("cheerio"));
 const http = __importStar(require("node:http"));
 const https = __importStar(require("node:https"));
 const dns = __importStar(require("node:dns"));
+const node_net_1 = require("node:net");
 const factory_1 = require("./scraping/factory");
 const DEFAULT_USER_AGENT = 'StealthLightbeaconNode/2.0';
 function createFetchPage(options = {}) {
@@ -61,13 +62,24 @@ function requestSecurePinned(urlStr, options) {
             headers: options.headers,
             rejectUnauthorized: true
         };
-        if (options.pinnedIp) {
+        const pinnedIp = options.pinnedIp;
+        const pinnedFamily = pinnedIp ? (0, node_net_1.isIP)(pinnedIp) : 0;
+        if (pinnedFamily > 0) {
             reqOptions.lookup = (hostname, opts, callback) => {
+                const wantsAll = typeof opts === 'object' && opts !== null && 'all' in opts && Boolean(opts.all);
                 if (hostname === host) {
-                    callback(null, options.pinnedIp, 4);
+                    if (wantsAll) {
+                        callback(null, [{ address: pinnedIp, family: pinnedFamily }]);
+                        return;
+                    }
+                    callback(null, pinnedIp, pinnedFamily);
                 }
                 else {
-                    dns.lookup(hostname, opts, callback);
+                    if (wantsAll) {
+                        dns.lookup(hostname, normalizeLookupAllOptions(opts), callback);
+                        return;
+                    }
+                    dns.lookup(hostname, normalizeLookupOptions(opts), callback);
                 }
             };
         }
@@ -97,6 +109,24 @@ function requestSecurePinned(urlStr, options) {
         });
         req.end();
     });
+}
+function normalizeLookupOptions(opts) {
+    if (typeof opts === 'number') {
+        return { family: opts };
+    }
+    return {
+        family: opts.family,
+        hints: opts.hints,
+        verbatim: opts.verbatim
+    };
+}
+function normalizeLookupAllOptions(opts) {
+    return {
+        family: opts.family,
+        hints: opts.hints,
+        verbatim: opts.verbatim,
+        all: true
+    };
 }
 async function fetchHttpPage(url, guard, userAgent, maxRedirects = 5) {
     const startTime = Date.now();
