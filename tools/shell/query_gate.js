@@ -10,7 +10,7 @@ const { createMcpServer } = require('../../dist/mcp/server.js');
       name: 'ontology.query',
       arguments: {
         cypher:
-          "MATCH (c1:CodeSymbol)-[:CALLS]->(c2:CodeSymbol) WHERE c1.name = 'createMcpServer' RETURN c2.name, c2.filePath, c2.startLine"
+          "MATCH (c1:CodeSymbol)-[:CALLS]->(c2:CodeSymbol) WHERE c1.name = 'createMcpServer' RETURN c2.name AS name, c2.filePath AS filePath, c2.startLine AS startLine"
       }
     }
   });

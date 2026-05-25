@@ -53,11 +53,12 @@ test('routes ontology Cypher queries to LadybugDB', async () => {
   const mod = await loadModule(path.join('mcp', 'server.js'));
   const server = mod.createMcpServer();
 
-  // Test MATCH (c1:CodeSymbol)-[:CALLS]->(c2:CodeSymbol) WHERE c1.name = 'createMcpServer' RETURN c2
+  // Verify the seeded Rust MCP graph exposes the createMcpServer -> RustMcpBridge edge.
   const response = await server.handleRequest(
     makeRequest('tools/call', {
       arguments: {
-        cypher: "MATCH (c1:CodeSymbol)-[:CALLS]->(c2:CodeSymbol) WHERE c1.name = 'createMcpServer' RETURN c2"
+        cypher:
+          "MATCH (c1:CodeSymbol)-[:CALLS]->(c2:CodeSymbol) WHERE c1.name = 'createMcpServer' RETURN c2.name AS name, c2.filePath AS filePath, c2.startLine AS startLine"
       },
       name: 'ontology.query'
     })
@@ -66,6 +67,6 @@ test('routes ontology Cypher queries to LadybugDB', async () => {
   assert.equal(response.result.content[0].type, 'text');
   const result = JSON.parse(response.result.content[0].text);
   assert.equal(result.ok, true);
-  assert.equal(result.result.length, 1);
-  assert.equal(result.result[0].name, 'invokeTool');
+  assert.equal(Array.isArray(result.result), true);
+  assert.equal(result.result.some((row) => row.name === 'RustMcpBridge'), true);
 });
