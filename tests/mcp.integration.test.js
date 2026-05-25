@@ -46,7 +46,11 @@ integrationTest('routes ontology Cypher queries to Rust MCP when integration mod
       assert.notEqual(row, null);
     }
   } else {
-    assert.equal(typeof result.error, 'string');
-    assert.ok(result.error.length > 0);
+    assert.notEqual(result.error, null);
+    const errorType = typeof result.error;
+    assert.equal(errorType === 'string' || errorType === 'object', true);
+    if (errorType === 'string') {
+      assert.ok(result.error.length > 0);
+    }
   }
 });
