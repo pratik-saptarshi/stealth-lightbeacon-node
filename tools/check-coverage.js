@@ -5,14 +5,42 @@ const MIN_LINE = Number(process.env.COVERAGE_MIN_LINE ?? 80);
 const MIN_BRANCH = Number(process.env.COVERAGE_MIN_BRANCH ?? 65);
 const MIN_FUNCTION = Number(process.env.COVERAGE_MIN_FUNCTION ?? 75);
 const COVERAGE_MODE = process.env.COVERAGE_MODE ?? 'full';
-const COVERAGE_COMMAND =
-  COVERAGE_MODE === 'ci'
-    ? "node --experimental-test-coverage --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')"
-    : 'node --experimental-test-coverage --test tests/*.test.js';
+const CI_EXCLUDED_TESTS = new Set([
+  'tests/ontology.test.js',
+  'tests/browser-pool.test.js',
+  'tests/scraping.test.js',
+  'tests/ssrf-dns-rebinding.test.js',
+  'tests/mcp.integration.test.js'
+]);
+
+function quoteForShell(value) {
+  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function resolveCoverageCommand() {
+  if (COVERAGE_MODE !== 'ci') {
+    return 'node --experimental-test-coverage --test tests/*.test.js';
+  }
+
+  const tests = require('node:fs')
+    .readdirSync('tests')
+    .filter((name) => name.endsWith('.test.js'))
+    .map((name) => `tests/${name}`)
+    .filter((file) => !CI_EXCLUDED_TESTS.has(file))
+    .sort();
+
+  if (tests.length === 0) {
+    throw new Error('No CI coverage tests selected.');
+  }
+
+  return `node --experimental-test-coverage --test ${tests.map(quoteForShell).join(' ')}`;
+}
+
+const COVERAGE_COMMAND = resolveCoverageCommand();
 
 const output = execSync(COVERAGE_COMMAND, {
   encoding: 'utf8',
-  shell: '/bin/zsh',
+  shell: true,
   stdio: ['ignore', 'pipe', 'pipe']
 });
 
