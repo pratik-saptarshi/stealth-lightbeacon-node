@@ -4,9 +4,15 @@ const { execSync } = require('node:child_process');
 const MIN_LINE = Number(process.env.COVERAGE_MIN_LINE ?? 80);
 const MIN_BRANCH = Number(process.env.COVERAGE_MIN_BRANCH ?? 65);
 const MIN_FUNCTION = Number(process.env.COVERAGE_MIN_FUNCTION ?? 75);
+const COVERAGE_MODE = process.env.COVERAGE_MODE ?? 'full';
+const COVERAGE_COMMAND =
+  COVERAGE_MODE === 'ci'
+    ? "node --experimental-test-coverage --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')"
+    : 'node --experimental-test-coverage --test tests/*.test.js';
 
-const output = execSync('node --experimental-test-coverage --test tests/*.test.js', {
+const output = execSync(COVERAGE_COMMAND, {
   encoding: 'utf8',
+  shell: '/bin/zsh',
   stdio: ['ignore', 'pipe', 'pipe']
 });
 

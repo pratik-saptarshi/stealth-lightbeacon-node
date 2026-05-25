@@ -5,10 +5,13 @@ exports.runStdioMcpServer = runStdioMcpServer;
 const node_readline_1 = require("node:readline");
 const client_1 = require("./client");
 function createMcpServer(options = {}) {
-    const bridge = new client_1.ProcessJsonRpcClient(options);
+    const bridge = options.transport ?? new client_1.ProcessJsonRpcClient(options);
     return {
         handleRequest(message) {
             return bridge.send(message);
+        },
+        stop() {
+            bridge.stop?.();
         }
     };
 }

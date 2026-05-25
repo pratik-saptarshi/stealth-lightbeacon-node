@@ -5,10 +5,12 @@ const os = require('node:os');
 const path = require('node:path');
 const Module = require('node:module');
 
-require('ts-node/register/transpile-only');
-
 const runOntologyTestsLocally = process.env.STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS === '1';
 const ontologyTest = runOntologyTestsLocally ? test : test.skip;
+
+if (runOntologyTestsLocally) {
+  require('ts-node/register/transpile-only');
+}
 
 const originalLoad = Module._load;
 const lanceDatabases = new Map();

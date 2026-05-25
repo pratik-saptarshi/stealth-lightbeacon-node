@@ -2,18 +2,27 @@ import { createInterface, type Interface } from 'node:readline';
 import { ProcessJsonRpcClient, type JsonRpcRequest, type JsonRpcResponse } from './client';
 export type { JsonRpcRequest, JsonRpcResponse } from './client';
 
+export type JsonRpcTransport = {
+  send: (message: JsonRpcRequest) => Promise<JsonRpcResponse | null>;
+  stop?: () => void;
+};
+
 export type CreateMcpServerOptions = {
   command?: string;
   commandArgs?: string[];
   cwd?: string;
   idleShutdownMs?: number;
+  transport?: JsonRpcTransport;
 };
 
 export function createMcpServer(options: CreateMcpServerOptions = {}) {
-  const bridge = new ProcessJsonRpcClient(options);
+  const bridge = options.transport ?? new ProcessJsonRpcClient(options);
   return {
     handleRequest(message: unknown) {
       return bridge.send(message as JsonRpcRequest);
+    },
+    stop() {
+      bridge.stop?.();
     }
   };
 }

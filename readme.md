@@ -89,6 +89,19 @@ npm run coverage
 npm run coverage:check
 ```
 
+### CI Test Modes
+
+- Baseline CI checks run deterministic JavaScript lanes:
+  - `npm run quality:typecheck`
+  - `npm run quality:unit`
+  - `npm run quality:mcp:contract`
+  - `npm run quality:coverage`
+- Ontology persistence tests are local-only and opt-in:
+  - `npm run test:ontology:local`
+- Rust MCP integration tests are isolated in an explicit lane:
+  - `npm run quality:integration:mcp`
+  - Requires compiled Rust MCP binary (`cargo build`).
+
 Release candidates should additionally run:
 
 ```sh

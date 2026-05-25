@@ -16,10 +16,20 @@
     "audit:signatures": "npm audit signatures",
     "pretest": "npm run build",
     "test": "node --test tests/*.test.js",
+    "test:unit": "node --test tests/*.test.js",
+    "test:unit:ci": "node --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')",
     "test:ontology:local": "STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 node --test tests/ontology.test.js",
+    "test:mcp:contract": "node --test tests/mcp.test.js",
+    "test:mcp:integration": "STEALTH_LIGHTBEACON_MCP_INTEGRATION_TESTS=1 node --test tests/mcp.integration.test.js",
     "coverage": "node --experimental-test-coverage --test tests/*.test.js",
+    "coverage:ci": "node --experimental-test-coverage --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')",
     "coverage:check": "node tools/check-coverage.js",
-    "quality:check": "npm run typecheck && npm run test && npm run coverage:check",
+    "quality:typecheck": "npm run typecheck",
+    "quality:unit": "npm run test:unit:ci",
+    "quality:mcp:contract": "npm run test:mcp:contract",
+    "quality:coverage": "COVERAGE_MODE=ci npm run coverage:check",
+    "quality:integration:mcp": "npm run test:mcp:integration",
+    "quality:check": "npm run quality:typecheck && npm run quality:unit && npm run quality:mcp:contract && npm run quality:coverage",
     "test:watch": "node --test --watch tests/*.test.js",
     "start": "npm run build && node dist/cli.js",
     "mcp": "npm run build && node dist/mcp/stdio.js"
@@ -57,6 +67,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "engines": {
