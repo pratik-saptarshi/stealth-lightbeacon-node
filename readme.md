@@ -86,6 +86,7 @@ Use `npm pack --dry-run` before any public source or npm release and inspect the
 npm run build
 npm test
 npm run coverage
+npm run coverage:check
 ```
 
 Release candidates should additionally run:
@@ -94,6 +95,11 @@ Release candidates should additionally run:
 npm pack --dry-run
 npm audit signatures
 ```
+
+Coverage thresholds are enforced by `npm run coverage:check`:
+- line coverage >= `80%`
+- branch coverage >= `65%`
+- function coverage >= `75%`
 
 ## License
 

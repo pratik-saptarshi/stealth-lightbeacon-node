@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PageSpeedService = void 0;
-const cache_1 = require("./cache");
 const schemas_1 = require("./db/schemas");
+const pagespeedCache_1 = require("./pagespeedCache");
 const PAGE_SPEED_API_URL = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
 const DEFAULT_CACHE_PATH = '.cache/pagespeed.duckdb';
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -76,7 +76,7 @@ class PageSpeedService {
             inpMs: inpPercentile,
             ttfbMs: ttfbPercentile
         });
-        await cache.set(url, summary);
+        await this.writeCacheWithRetry(cache, url, summary);
         return summary;
     }
     async close() {
@@ -95,9 +95,25 @@ class PageSpeedService {
             return this.cache;
         }
         if (!this.cachePromise) {
-            this.cachePromise = Promise.resolve(new cache_1.DuckDbJsonCache(this.cachePath, schemas_1.pageSpeedSummarySchema));
+            this.cachePromise = Promise.resolve((0, pagespeedCache_1.createDuckDbPageSpeedCache)({ cachePath: this.cachePath }));
         }
         return this.cachePromise;
+    }
+    async writeCacheWithRetry(cache, url, summary) {
+        let delay = 25;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                await cache.set(url, summary);
+                return;
+            }
+            catch (error) {
+                if (!isContentionError(error) || attempt === 3) {
+                    throw error;
+                }
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                delay *= 2;
+            }
+        }
     }
 }
 exports.PageSpeedService = PageSpeedService;
@@ -116,4 +132,11 @@ function extractPercentile(metrics, metricName) {
     const metric = metrics?.[metricName];
     const percentile = metric?.percentile;
     return typeof percentile === 'number' ? percentile : undefined;
+}
+function isContentionError(error) {
+    if (!(error instanceof Error)) {
+        return false;
+    }
+    const message = error.message.toLowerCase();
+    return message.includes('lock') || message.includes('busy') || message.includes('conflict');
 }

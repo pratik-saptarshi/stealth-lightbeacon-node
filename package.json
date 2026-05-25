@@ -1,6 +1,6 @@
 {
   "name": "stealth-lightbeacon-node",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "TypeScript crawl orchestration, MCP tools, and multi-domain site auditing with security checks, SEO, AEO, GEO, and performance reporting",
   "main": "dist/index.js",
   "bin": {
@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "npm run build",
     "pack:dry": "npm pack --dry-run",
@@ -16,6 +17,8 @@
     "pretest": "npm run build",
     "test": "node --test tests/*.test.js",
     "coverage": "node --experimental-test-coverage --test tests/*.test.js",
+    "coverage:check": "node tools/check-coverage.js",
+    "quality:check": "npm run typecheck && npm run test && npm run coverage:check",
     "test:watch": "node --test --watch tests/*.test.js",
     "start": "npm run build && node dist/cli.js",
     "mcp": "npm run build && node dist/mcp/stdio.js"

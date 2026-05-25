@@ -1,5 +1,5 @@
-import { DuckDbJsonCache } from './cache';
 import { pageSpeedSummarySchema, type PageSpeedSummary as PageSpeedSummaryShape } from './db/schemas';
+import { createDuckDbPageSpeedCache, type PageSpeedCache } from './pagespeedCache';
 
 export type PageSpeedSummary = PageSpeedSummaryShape;
 
@@ -8,7 +8,7 @@ const DEFAULT_CACHE_PATH = '.cache/pagespeed.duckdb';
 const DEFAULT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface PageSpeedServiceOptions {
-  cache?: DuckDbJsonCache<PageSpeedSummary>;
+  cache?: PageSpeedCache;
   cachePath?: string;
   cacheTtlMs?: number;
 }
@@ -16,8 +16,8 @@ export interface PageSpeedServiceOptions {
 export class PageSpeedService {
   private readonly cacheTtlMs: number;
   private readonly cachePath: string;
-  private readonly cache?: DuckDbJsonCache<PageSpeedSummary>;
-  private cachePromise: Promise<DuckDbJsonCache<PageSpeedSummary>> | null = null;
+  private readonly cache?: PageSpeedCache;
+  private cachePromise: Promise<PageSpeedCache> | null = null;
 
   constructor(options: PageSpeedServiceOptions = {}) {
     this.cache = options.cache;
@@ -94,7 +94,7 @@ export class PageSpeedService {
       ttfbMs: ttfbPercentile
     });
 
-    await cache.set(url, summary);
+    await this.writeCacheWithRetry(cache, url, summary);
     return summary;
   }
 
@@ -111,18 +111,32 @@ export class PageSpeedService {
     }
   }
 
-  private async getCache(): Promise<DuckDbJsonCache<PageSpeedSummary>> {
+  private async getCache(): Promise<PageSpeedCache> {
     if (this.cache) {
       return this.cache;
     }
 
     if (!this.cachePromise) {
-      this.cachePromise = Promise.resolve(
-        new DuckDbJsonCache(this.cachePath, pageSpeedSummarySchema)
-      );
+      this.cachePromise = Promise.resolve(createDuckDbPageSpeedCache({ cachePath: this.cachePath }));
     }
 
     return this.cachePromise;
+  }
+
+  private async writeCacheWithRetry(cache: PageSpeedCache, url: string, summary: PageSpeedSummary): Promise<void> {
+    let delay = 25;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await cache.set(url, summary);
+        return;
+      } catch (error) {
+        if (!isContentionError(error) || attempt === 3) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
   }
 }
 
@@ -153,4 +167,12 @@ function extractPercentile(
   const metric = metrics?.[metricName] as Record<string, any> | undefined;
   const percentile = metric?.percentile;
   return typeof percentile === 'number' ? percentile : undefined;
+}
+
+function isContentionError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message.toLowerCase();
+  return message.includes('lock') || message.includes('busy') || message.includes('conflict');
 }

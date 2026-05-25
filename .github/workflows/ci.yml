@@ -30,8 +30,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test
-        run: npm test
+      - name: Quality gate (typecheck, unit tests, coverage threshold)
+        run: npm run quality:check
 
       - name: Pack dry run
         run: npm run pack:dry
