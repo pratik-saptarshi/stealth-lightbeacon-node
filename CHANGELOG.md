@@ -1,5 +1,7 @@
 # Changelog
 
+## [3.0.11](https://github.com/pratik-saptarshi/stealth-lightbeacon-node/compare/v3.0.10...v3.0.11) (2026-05-26)
+
 All notable changes to this project will be documented in this file.
 
 ## [3.0.9]
