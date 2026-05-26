@@ -57,3 +57,35 @@ test('Obscura (fast) engine: runs custom sub-process or falls back to http clien
     assert.match(err.message, /ECONNREFUSED|fetch/i);
   }
 });
+
+test('MCP engine: invokes StealthMcpClient tool scrape', async () => {
+  const modClient = await loadModule(path.join('mcp', 'client.js'));
+  const originalCallTool = modClient.StealthMcpClient.prototype.callTool;
+  
+  let calledUrl = null;
+  modClient.StealthMcpClient.prototype.callTool = async function(toolName, args) {
+    if (toolName === 'scrape') {
+      calledUrl = args.url;
+      return {
+        url: args.url,
+        html: '<html>Mock</html>',
+        headers: {},
+        status: 200,
+        responseTimeMs: 50
+      };
+    }
+    throw new Error(`Unexpected tool: ${toolName}`);
+  };
+  
+  try {
+    const modFactory = await loadModule(path.join('core', 'scraping', 'factory.js'));
+    const scraper = modFactory.createScraper({ engine: 'mcp', allowPrivate: true });
+    const result = await scraper('http://example.com/mcp-test');
+    
+    assert.equal(calledUrl, 'http://example.com/mcp-test');
+    assert.equal(result.html, '<html>Mock</html>');
+    assert.equal(result.status, 200);
+  } finally {
+    modClient.StealthMcpClient.prototype.callTool = originalCallTool;
+  }
+});

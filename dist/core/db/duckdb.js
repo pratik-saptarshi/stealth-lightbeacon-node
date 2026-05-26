@@ -106,10 +106,30 @@ async function createDuckDbRuntime(input = {}) {
             }
             closed = true;
             try {
-                connection.disconnectSync();
+                await new Promise((resolve, reject) => {
+                    setImmediate(() => {
+                        try {
+                            connection.disconnectSync();
+                            resolve();
+                        }
+                        catch (err) {
+                            reject(err);
+                        }
+                    });
+                });
             }
             finally {
-                instance.closeSync();
+                await new Promise((resolve, reject) => {
+                    setImmediate(() => {
+                        try {
+                            instance.closeSync();
+                            resolve();
+                        }
+                        catch (err) {
+                            reject(err);
+                        }
+                    });
+                });
                 if (tempDirectoryInfo.owned) {
                     (0, node_fs_1.rmSync)(tempDirectoryInfo.path, { force: true, recursive: true });
                 }

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Command } from 'commander';
 import ora from 'ora';
 import { createDefaultEvaluators } from './core/defaultEvaluators';
-import { createFetchPage, discoverBrokenLinks, fetchHttpPage } from './core/fetcher';
+import { createFetchPage, discoverBrokenLinks, fetchHttpPage, secureFetch } from './core/fetcher';
 import { loadRuntimeOptions } from './core/config';
 import { runAudit } from './core/orchestrator';
 import { Reporter } from './core/reporter';
@@ -17,6 +17,17 @@ import { BrowserPool } from './core/scraping/browserPool';
 const DEFAULT_OUTPUT_DIR = 'reports';
 
 async function main(): Promise<void> {
+  const cleanup = async () => {
+    try {
+      await BrowserPool.getInstance().close();
+    } catch {
+      // Ignore cleanup error
+    }
+    process.exit(130);
+  };
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
   const program = new Command();
 
   program
@@ -28,7 +39,7 @@ async function main(): Promise<void> {
     .command('evaluate')
     .argument('<url>', 'Target Drupal site URL')
     .option('-o, --out <dir>', 'Output directory', DEFAULT_OUTPUT_DIR)
-    .option('-f, --format <format>', 'Report format: json, html, both', 'both')
+    .option('-f, --format <format>', 'Report format: json, html, both, llm, geo-xml', 'both')
     .option('-d, --crawl-depth <depth>', 'Crawl depth', '0')
     .option('-n, --max-urls <count>', 'Maximum crawled URLs', '10')
     .option('--render', 'Render JS via Playwright', false)
@@ -117,8 +128,7 @@ async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknow
     let robotsContent: string | undefined = undefined;
     try {
       const robotsUrl = new URL('/robots.txt', url).toString();
-      await guard.validate(robotsUrl);
-      const robotsResponse = await fetch(robotsUrl, { method: 'GET', redirect: 'follow' });
+      const robotsResponse = await secureFetch(robotsUrl, { method: 'GET', guard });
       if (robotsResponse.ok) {
         robotsContent = await robotsResponse.text();
       }
@@ -136,9 +146,8 @@ async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknow
         const auxiliaryResponses: Record<string, { status: number; body: string }> = {};
         if (options.checkApi) {
           const jsonApiUrl = new URL('/jsonapi/user/user', page.url).toString();
-          await guard.validate(jsonApiUrl);
           try {
-            const response = await fetch(jsonApiUrl, { method: 'GET', redirect: 'follow' });
+            const response = await secureFetch(jsonApiUrl, { method: 'GET', guard });
             auxiliaryResponses.jsonApiUser = {
               status: response.status,
               body: await response.text()
@@ -186,6 +195,12 @@ async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknow
           outputs.push(pdfPath);
         }
       }
+    }
+    if (options.reportFormat === 'llm') {
+      outputs.push(reporter.writeLlm(report));
+    }
+    if (options.reportFormat === 'geo-xml') {
+      outputs.push(reporter.writeGeoXml(report));
     }
 
     if (options.budgetPath) {

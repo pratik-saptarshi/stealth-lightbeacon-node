@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProcessJsonRpcClient = void 0;
+exports.StealthMcpClient = exports.ProcessJsonRpcClient = void 0;
 const node_child_process_1 = require("node:child_process");
 const node_readline_1 = require("node:readline");
 class ProcessJsonRpcClient {
@@ -115,3 +115,75 @@ class ProcessJsonRpcClient {
     }
 }
 exports.ProcessJsonRpcClient = ProcessJsonRpcClient;
+class StealthMcpClient {
+    options;
+    client = null;
+    isInitialized = false;
+    constructor(options = {}) {
+        this.options = options;
+        process.once('exit', () => {
+            this.stop().catch(() => { });
+        });
+    }
+    async start() {
+        if (this.client)
+            return;
+        this.client = new ProcessJsonRpcClient(this.options);
+        const handshakeTimeout = Number(process.env.SLB_MCP_HANDSHAKE_TIMEOUT) || 5000;
+        const handshakePromise = (async () => {
+            const initResponse = await this.client.send({
+                jsonrpc: '2.0',
+                method: 'initialize',
+                params: {
+                    protocolVersion: '2024-11-05',
+                    capabilities: {},
+                    clientInfo: { name: 'StealthLightbeaconNodeClient', version: '1.0.0' }
+                }
+            });
+            if (!initResponse || initResponse.error) {
+                throw new Error(`MCP handshake initialization failed: ${initResponse?.error?.message ?? 'unknown error'}`);
+            }
+            await this.client.send({
+                jsonrpc: '2.0',
+                method: 'notifications/initialized'
+            });
+            this.isInitialized = true;
+        })();
+        await Promise.race([
+            handshakePromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`MCP handshake timed out after ${handshakeTimeout}ms`)), handshakeTimeout))
+        ]);
+    }
+    async callTool(name, args = {}) {
+        await this.start();
+        const response = await this.client.send({
+            jsonrpc: '2.0',
+            method: 'tools/call',
+            params: { name, arguments: args }
+        });
+        if (!response) {
+            throw new Error(`No response from MCP tool call: ${name}`);
+        }
+        if (response.error) {
+            throw new Error(`MCP tool call ${name} failed: ${response.error.message}`);
+        }
+        return response.result;
+    }
+    async stop() {
+        if (this.client) {
+            try {
+                await this.client.send({
+                    jsonrpc: '2.0',
+                    method: 'shutdown'
+                });
+            }
+            catch {
+                // Ignore shutdown request errors
+            }
+            this.client.stop();
+            this.client = null;
+            this.isInitialized = false;
+        }
+    }
+}
+exports.StealthMcpClient = StealthMcpClient;

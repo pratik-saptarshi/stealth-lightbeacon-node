@@ -136,3 +136,85 @@ export class ProcessJsonRpcClient {
     this.idleTimer.unref();
   }
 }
+
+export class StealthMcpClient {
+  private client: ProcessJsonRpcClient | null = null;
+  private isInitialized = false;
+
+  constructor(private readonly options: ProcessJsonRpcClientOptions = {}) {
+    process.once('exit', () => {
+      this.stop().catch(() => {});
+    });
+  }
+
+  public async start(): Promise<void> {
+    if (this.client) return;
+
+    this.client = new ProcessJsonRpcClient(this.options);
+
+    const handshakeTimeout = Number(process.env.SLB_MCP_HANDSHAKE_TIMEOUT) || 5000;
+
+    const handshakePromise = (async () => {
+      const initResponse = await this.client!.send({
+        jsonrpc: '2.0',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'StealthLightbeaconNodeClient', version: '1.0.0' }
+        }
+      });
+
+      if (!initResponse || initResponse.error) {
+        throw new Error(`MCP handshake initialization failed: ${initResponse?.error?.message ?? 'unknown error'}`);
+      }
+
+      await this.client!.send({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized'
+      });
+
+      this.isInitialized = true;
+    })();
+
+    await Promise.race([
+      handshakePromise,
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error(`MCP handshake timed out after ${handshakeTimeout}ms`)), handshakeTimeout)
+      )
+    ]);
+  }
+
+  public async callTool(name: string, args: Record<string, any> = {}): Promise<any> {
+    await this.start();
+    const response = await this.client!.send({
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: { name, arguments: args }
+    });
+
+    if (!response) {
+      throw new Error(`No response from MCP tool call: ${name}`);
+    }
+    if (response.error) {
+      throw new Error(`MCP tool call ${name} failed: ${response.error.message}`);
+    }
+    return response.result;
+  }
+
+  public async stop(): Promise<void> {
+    if (this.client) {
+      try {
+        await this.client.send({
+          jsonrpc: '2.0',
+          method: 'shutdown'
+        });
+      } catch {
+        // Ignore shutdown request errors
+      }
+      this.client.stop();
+      this.client = null;
+      this.isInitialized = false;
+    }
+  }
+}

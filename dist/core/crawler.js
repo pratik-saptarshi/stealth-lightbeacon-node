@@ -89,7 +89,6 @@ async function crawlSite(options) {
     let activeCount = 0;
     const queueResolvers = [];
     const popMutex = new Mutex();
-    const activeProcessingUrls = new Set();
     const notifyQueueChanged = () => {
         while (queueResolvers.length > 0) {
             const resolve = queueResolvers.shift();
@@ -126,54 +125,48 @@ async function crawlSite(options) {
         return Number(res.rows[0].count);
     };
     const nextEntry = async () => {
-        return await popMutex.runExclusive(async () => {
-            while (true) {
-                const completed = await getCompletedCount();
-                if (completed >= options.maxUrls) {
-                    return null;
-                }
-                const pending = await getPendingCount();
-                if (pending === 0) {
-                    if (activeCount === 0) {
-                        return null;
-                    }
-                    popMutex.release();
-                    await new Promise((resolve) => {
-                        queueResolvers.push(resolve);
-                    });
-                    await popMutex.acquire();
-                    continue;
-                }
+        while (true) {
+            const completed = await getCompletedCount();
+            if (completed >= options.maxUrls) {
+                return null;
+            }
+            // 1. Try to pop atomically
+            const popped = await popMutex.runExclusive(async () => {
                 const result = await duck.query({
                     sql: `
-            SELECT url, depth 
-            FROM crawl_queue 
-            WHERE status = 'pending' 
-            ORDER BY depth ASC
+            UPDATE crawl_queue 
+            SET status = 'fetching' 
+            WHERE url = (
+              SELECT url FROM crawl_queue 
+              WHERE status = 'pending' 
+              ORDER BY depth ASC 
+              LIMIT 1
+            )
+            RETURNING url, depth
           `
                 });
-                const pendingRow = result.rows.find(row => !activeProcessingUrls.has(row.url));
-                if (!pendingRow) {
-                    if (activeCount === 0) {
-                        return null;
-                    }
-                    popMutex.release();
-                    await new Promise((resolve) => {
-                        queueResolvers.push(resolve);
-                    });
-                    await popMutex.acquire();
-                    continue;
+                if (result.rows.length > 0) {
+                    const row = result.rows[0];
+                    return { url: row.url, depth: Number(row.depth) };
                 }
-                const targetUrl = pendingRow.url;
-                activeProcessingUrls.add(targetUrl);
-                await duck.exec({
-                    sql: `UPDATE crawl_queue SET status = 'fetching' WHERE url = ?`,
-                    params: [targetUrl]
-                });
+                return null;
+            });
+            if (popped) {
                 activeCount++;
-                return { url: targetUrl, depth: Number(pendingRow.depth) };
+                return popped;
             }
-        });
+            // 2. If nothing was popped, check if we are finished
+            if (activeCount === 0) {
+                const pending = await getPendingCount();
+                if (pending === 0) {
+                    return null; // All workers idle and no pending work -> finished!
+                }
+            }
+            // 3. Otherwise, wait for the queue to change
+            await new Promise((resolve) => {
+                queueResolvers.push(resolve);
+            });
+        }
     };
     const runWorker = async () => {
         while (true) {
@@ -225,7 +218,6 @@ async function crawlSite(options) {
                 brokenPages.set(normalizedUrl, 0);
             }
             finally {
-                activeProcessingUrls.delete(normalizedUrl);
                 activeCount--;
                 notifyQueueChanged();
             }

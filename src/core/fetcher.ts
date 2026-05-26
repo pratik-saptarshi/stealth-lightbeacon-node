@@ -4,7 +4,7 @@ import * as https from 'node:https';
 import * as dns from 'node:dns';
 import { isIP } from 'node:net';
 import type { CrawledPage } from './crawler';
-import { SSRFGuard } from './ssrf';
+import { SSRFGuard, getSSRFGuardAgents } from './ssrf';
 import { createScraper } from './scraping/factory';
 
 export interface FetchPageOptions {
@@ -23,6 +23,7 @@ export interface PinnedRequestOptions {
   method?: string;
   headers?: Record<string, string>;
   pinnedIp?: string;
+  guard?: SSRFGuard;
 }
 
 export function requestSecurePinned(
@@ -45,26 +46,9 @@ export function requestSecurePinned(
       rejectUnauthorized: true
     };
 
-    const pinnedIp = options.pinnedIp;
-    const pinnedFamily = pinnedIp ? isIP(pinnedIp) : 0;
-    if (pinnedFamily > 0) {
-      reqOptions.lookup = (hostname, opts, callback) => {
-        const wantsAll = typeof opts === 'object' && opts !== null && 'all' in opts && Boolean(opts.all);
-        if (hostname === host) {
-          if (wantsAll) {
-            callback(null, [{ address: pinnedIp!, family: pinnedFamily }]);
-            return;
-          }
-          callback(null, pinnedIp!, pinnedFamily);
-        } else {
-          if (wantsAll) {
-            dns.lookup(hostname, normalizeLookupAllOptions(opts), callback);
-            return;
-          }
-          dns.lookup(hostname, normalizeLookupOptions(opts), callback);
-        }
-      };
-    }
+    const guard = options.guard ?? new SSRFGuard();
+    const agents = getSSRFGuardAgents(guard);
+    reqOptions.agent = isHttps ? agents.httpsAgent : agents.httpAgent;
 
     const req = client.request(reqOptions, (res) => {
       const chunks: Buffer[] = [];
@@ -143,7 +127,8 @@ export async function fetchHttpPage(
     response = await requestSecurePinned(currentUrl, {
       method: 'GET',
       headers: requestHeaders,
-      pinnedIp: pinnedIp ?? undefined
+      pinnedIp: pinnedIp ?? undefined,
+      guard
     });
 
     if (response.status >= 300 && response.status < 400) {
@@ -245,3 +230,29 @@ export function discoverBrokenLinks(html: string, baseUrl: string): string[] {
 
   return [...links];
 }
+
+export async function secureFetch(
+  urlStr: string,
+  options: { method?: string; headers?: Record<string, string>; guard?: SSRFGuard } = {}
+): Promise<{ ok: boolean; status: number; headers: Record<string, string>; text: () => Promise<string>; json: () => Promise<any> }> {
+  const guard = options.guard ?? new SSRFGuard();
+  await guard.validate(urlStr);
+  const parsed = new URL(urlStr);
+  const pinnedIp = guard.getPinnedAddress(parsed.hostname);
+
+  const res = await requestSecurePinned(urlStr, {
+    method: options.method,
+    headers: options.headers,
+    pinnedIp: pinnedIp ?? undefined,
+    guard
+  });
+
+  return {
+    ok: res.status >= 200 && res.status < 300,
+    status: res.status,
+    headers: res.headers,
+    text: () => res.text(),
+    json: async () => JSON.parse(await res.text())
+  };
+}
+

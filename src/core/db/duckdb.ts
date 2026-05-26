@@ -114,9 +114,27 @@ export async function createDuckDbRuntime(input: unknown = {}): Promise<DuckDbRu
       closed = true;
 
       try {
-        connection.disconnectSync();
+        await new Promise<void>((resolve, reject) => {
+          setImmediate(() => {
+            try {
+              connection.disconnectSync();
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
       } finally {
-        instance.closeSync();
+        await new Promise<void>((resolve, reject) => {
+          setImmediate(() => {
+            try {
+              instance.closeSync();
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
 
         if (tempDirectoryInfo.owned) {
           rmSync(tempDirectoryInfo.path, { force: true, recursive: true });

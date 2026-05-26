@@ -27,8 +27,7 @@ export class ZendriverEngine {
     await this.ssrfGuard.validate(url);
     const startTime = Date.now();
     
-    const browser = await BrowserPool.getInstance().getBrowser();
-    const ctx = await browser.newContext({
+    const ctx = await BrowserPool.getInstance().acquireContext({
       viewport: { width: 1920, height: 1080 },
       userAgent: this.userAgent,
       acceptDownloads: false,
@@ -36,40 +35,7 @@ export class ZendriverEngine {
       deviceScaleFactor: 1,
       timezoneId: 'America/New_York'
     });
-
     try {
-      // Fulfill every browser request in Node context to enforce dynamic IP pinning and prevent DNS rebinding
-      await ctx.route('**/*', async (route) => {
-        const req = route.request();
-        const reqUrl = req.url();
-        try {
-          await this.ssrfGuard.validate(reqUrl);
-
-          if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://')) {
-            await route.continue();
-            return;
-          }
-
-          const parsed = new URL(reqUrl);
-          const host = parsed.hostname;
-          const pinnedIp = this.ssrfGuard.getPinnedAddress(host);
-
-          const response = await requestSecurePinned(reqUrl, {
-            method: req.method(),
-            headers: req.headers(),
-            pinnedIp: pinnedIp ?? undefined
-          });
-
-          await route.fulfill({
-            status: response.status,
-            headers: response.headers,
-            body: await response.text()
-          });
-        } catch {
-          await route.abort('blockedbyclient');
-        }
-      });
-
       // Bypass webdriver detection scripts
       await ctx.addInitScript(() => {
         // Override webdriver flag
@@ -127,7 +93,7 @@ export class ZendriverEngine {
         responseTimeMs: Date.now() - startTime
       };
     } finally {
-      await ctx.close();
+      await BrowserPool.getInstance().releaseContext(ctx);
     }
   }
 }

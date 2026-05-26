@@ -2,156 +2,32 @@ name: CI
 
 on:
   push:
+    branches: [ main, feature/* ]
   pull_request:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [ main ]
 
 jobs:
-  typecheck:
+  build-and-test:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
 
-      - name: Set up Node.js 24
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: 24
-          cache: npm
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify registry signatures
-        run: npm run audit:signatures
-
-      - name: Typecheck
-        run: npm run quality:typecheck
-
-  unit-js:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
+      - name: Build project
         run: npm run build
 
-      - name: Unit tests (CI-safe)
-        run: npm run quality:unit
-
-  mcp-contract:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: MCP JSON-RPC contract tests
-        run: npm run quality:mcp:contract
-
-  coverage:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Coverage + threshold gate
-        run: npm run quality:coverage
-
-  integration-rust-mcp:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Set up Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Rust MCP binary
-        run: cargo build
-
-      - name: Rust MCP integration tests
-        run: npm run quality:integration:mcp
-
-  pack-dry-run:
-    runs-on: ubuntu-latest
-    needs:
-      - typecheck
-      - unit-js
-      - mcp-contract
-      - coverage
-      - integration-rust-mcp
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Pack dry run
-        run: npm run pack:dry
+      - name: Run Quality Checks
+        run: npm run quality:check

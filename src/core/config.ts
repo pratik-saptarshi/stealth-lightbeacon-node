@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const reportFormatSchema = z.enum(['json', 'html', 'both']);
+export const reportFormatSchema = z.enum(['json', 'html', 'both', 'llm', 'geo-xml']);
 export const engineSchema = z.enum(['http', 'rendered', 'fast', 'stealth']);
 
 const runtimeOptionsSchema = z.object({

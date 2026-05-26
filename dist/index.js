@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProcessJsonRpcClient = exports.createMcpServer = exports.listDefaultEvaluatorPlugins = exports.createDefaultEvaluators = exports.validateBudgets = exports.runAudit = exports.loadRuntimeOptions = exports.resolveOntologyPaths = exports.createOntologyStore = void 0;
+exports.StealthMcpClient = exports.ProcessJsonRpcClient = exports.createMcpServer = exports.listDefaultEvaluatorPlugins = exports.createDefaultEvaluators = exports.validateBudgets = exports.runAudit = exports.loadRuntimeOptions = exports.resolveOntologyPaths = exports.createOntologyStore = void 0;
 __exportStar(require("./core/db"), exports);
 var ontology_1 = require("./core/ontology");
 Object.defineProperty(exports, "createOntologyStore", { enumerable: true, get: function () { return ontology_1.createOntologyStore; } });
@@ -33,3 +33,4 @@ var protocol_1 = require("./mcp/protocol");
 Object.defineProperty(exports, "createMcpServer", { enumerable: true, get: function () { return protocol_1.createMcpServer; } });
 var protocol_2 = require("./mcp/protocol");
 Object.defineProperty(exports, "ProcessJsonRpcClient", { enumerable: true, get: function () { return protocol_2.ProcessJsonRpcClient; } });
+Object.defineProperty(exports, "StealthMcpClient", { enumerable: true, get: function () { return protocol_2.StealthMcpClient; } });

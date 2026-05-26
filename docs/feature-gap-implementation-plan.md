@@ -1,97 +1,199 @@
-# Feature-Gap Implementation Plan
+# Stealth Lightbeacon Node: Comprehensive Product Roadmap & Implementation Plan
 
-## Scope
-Compare `stealth-lightbeacon-node` against `stealth-lightbeacon` and close the user-facing feature gaps that are still meaningful after the Rust MCP / ontology migration.
+This implementation plan details the product roadmap designed to close features and high-severity architectural gaps in `stealth-lightbeacon-node`. It incorporates all findings from the Round 2 **Overseer Adversarial Review Panel** (including Supreme Judge verdicts) to bring the codebase to full production readiness.
 
-## Baseline
+---
 
-Already at parity or intentionally superseded in `stealth-lightbeacon-node`:
+## 🏛️ BEADS Framework Reference
+- **`B` (Blocker)**: The underlying technical barrier or gap in the codebase.
+- **`E` (Evidence)**: Empirical code paths, references, or runtime behaviors confirming the gap.
+- **`S` (Success)**: Concrete success criteria, validation assertions, and test gates.
 
-- HTTP, rendered, fast-path, and stealth scraping engines.
-- SSRF guard and pinned-request handling.
-- JSON, HTML, and PDF report outputs.
-- PageSpeed enrichment inside the audit pipeline.
-- MCP-backed ontology and database tooling.
-- Release-safe output paths and artifact hygiene controls.
+---
 
-Do not spend implementation time re-creating features that are already present unless the node version needs a stronger contract or test boundary.
+## 🗂️ Category 1: Core Engine Architecture & Plugin Contracts
 
-## Gaps To Close
+### 🚀 Epic 1.1: Evaluator Plugin Registry (Gap G1)
+*Goal: Move from ad hoc arrays to an extensible, structured plugin lifecycle model.*
 
-| Gap ID | Python-repo feature | Node-repo status | Plan action |
-|---|---|---|---|
-| G1 | Async plugin framework with independently composed evaluators | Evaluators exist, but there is no explicit plugin registry / lifecycle contract | Introduce a first-class evaluator plugin registry with metadata, registration, and deterministic load order |
-| G2 | PageSpeed cache with explicit contention-safe SQLite/WAL semantics | Node has a DuckDB-backed cache, but the cache contract is not documented as a concurrency boundary | Formalize the PageSpeed cache adapter, add write-contention handling, and document cache guarantees and failure modes |
-| G3 | `StealthMcpLayer` client wrapper for autonomous agent orchestration | Node exposes MCP server tooling, but not a dedicated client wrapper for agent-side tool sessions | Add a reusable MCP client layer for browser/tool sessions and wire it into the scraping/fetching factory |
-| G4 | Strict coverage posture and lint gate (`>=90%` branch coverage in Python repo) | Node has tests and coverage scripts, but no explicit parity target in the repo contract | Set explicit coverage thresholds and add the missing lint / quality gates in CI and local docs |
+#### 🧩 Feature 1.1.1: Dynamic Evaluator Registry & Lifecycle Boundary
+- **User Story 1.1.1.1**: As a developer, I want to register and dynamically load custom diagnostic evaluators without altering core orchestrator code.
+  - **Tasks**:
+    - [ ] Create `Evaluator` TS interface in [src/core/types.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/types.ts) with dynamic fields (`id`, `description`, `run()`, `prerequisites`).
+    - [ ] Implement `EvaluatorRegistry` class in [src/core/evaluatorRegistry.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/evaluatorRegistry.ts) with `register()`, `get()`, and `list()` functions.
+    - [ ] Refactor [src/core/orchestrator.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/orchestrator.ts) to resolve active evaluators dynamically from the registry instead of importing [src/core/defaultEvaluators.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/defaultEvaluators.ts).
+  - **BEADS Tracking**:
+    - **`B`**: Ad hoc imports in `defaultEvaluators.ts` block dynamic loading of third-party security or performance plugins.
+    - **`E`**: [src/core/defaultEvaluators.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/defaultEvaluators.ts) hardcodes static lists of standard evaluators.
+    - **`S`**: Registry dynamic lookup behaves identically; standard unit tests pass and new custom evaluators load without modifying core files.
 
-## Implementation Plan
+---
 
-### Phase 1: Make evaluator composition explicit
+### 🚀 Epic 1.2: Agent-side MCP Client Wrapper (Gap G3)
+*Goal: Provide robust, client-side session management for autonomous agent browser tool integrations.*
 
-- Define a lightweight plugin contract for evaluators.
-- Add registration metadata for each evaluator: id, domain, description, and prerequisites.
-- Replace ad hoc evaluator array assembly with a registry-backed loader.
-- Keep current evaluator behavior unchanged while the registry is introduced.
+#### 🧩 Feature 1.2.1: Reusable Autonomous MCP Client Layer
+- **User Story 1.2.1.1**: As an autonomous agent consumer, I want browser/tool interactions wrapped in a deterministic, client-side MCP lifecycle boundary to prevent resource leaks.
+  - **Tasks**:
+    - [ ] Implement `StealthMcpClient` class in [src/mcp/client.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/mcp/client.ts) to manage process start, IO stream draining, and robust cleanup.
+    - [ ] Add bounded handshake timeout (`SLB_MCP_HANDSHAKE_TIMEOUT`) and process shutdown controls to `StealthMcpClient`.
+    - [ ] Refactor the scraping fetcher in [src/core/scraping/](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/scraping/) to delegate to `StealthMcpClient` for agent tool sessions.
+  - **BEADS Tracking**:
+    - **`B`**: Lacks unified client wrapping; subprocess execution and stream parsing code are duplicated.
+    - **`E`**: No client counterpart exists for [src/mcp/server.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/mcp/server.ts).
+    - **`S`**: Tool-session teardown is fully automated; no orphaned browser processes remain under concurrent loads.
 
-Acceptance criteria:
-- Evaluators can be registered and enumerated without touching the orchestrator.
-- Audit runs still produce the same report output for existing domains.
+---
 
-### Phase 2: Harden PageSpeed caching
+## 🗂️ Category 2: Security & SSRF Governance
 
-- Move PageSpeed cache behavior behind a dedicated adapter boundary.
-- Document the cache key, TTL, and eviction assumptions.
-- Add contention-aware write handling and tests for cache reuse / stale entry rejection.
-- Preserve the existing DuckDB-backed implementation unless a stronger persistence choice is required later.
+### 🚀 Epic 2.1: SSRF Guard & TLS Verification (Gap G5 / R2-F01)
+*Goal: Redesign SSRF DNS pinning to support secure HTTPS targets without certificate validation failure.*
 
-Acceptance criteria:
-- Cache hits are deterministic across repeated runs.
-- Cache writes do not regress audit throughput under concurrent audit loads.
-- Tests cover cache hit, stale entry, and write-failure paths.
+#### 🧩 Feature 2.1.1: Custom Agent-Level Socket Pinning
+- **User Story 2.1.1.1**: As a security-sensitive auditor, I want outbound HTTPS fetch requests pinned at the socket level to validated IPs while retaining correct host headers and SNI configurations to prevent TLS mismatches.
+  - **Tasks**:
+    - [ ] Implement a custom `SSRFGuardAgent` inheriting from Node's `http.Agent` and `https.Agent` in [src/core/ssrf.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/ssrf.ts).
+    - [ ] Override `createConnection` to resolve the DNS hostname, validate the resolved IP against the SSRF blocklist, and open a direct connection to that IP while keeping the standard host header and TLS server name verification intact.
+    - [ ] Refactor [src/core/fetcher.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/fetcher.ts#L37-L43) to use the new custom socket-pinning Agent instead of rewriting URL host strings.
+  - **BEADS Tracking**:
+    - **`B`**: Rewriting hostnames to IP addresses before request dispatch destroys TLS server name identification (SNI), causing all HTTPS audits to fail certificate validation.
+    - **`E`**: [src/core/fetcher.ts:37-43](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/fetcher.ts#L37-L43) replaces hostnames in target URLs with resolved IP addresses.
+    - **`S`**: Audits targeting secure HTTPS targets succeed without certificate mismatch warnings, while DNS-rebinding or loopback targets are safely blocked at socket creation time.
 
-### Phase 3: Add a reusable MCP client layer
+---
 
-- Add a client wrapper that encapsulates MCP session lifecycle, request correlation, and shutdown.
-- Use that wrapper for browser/tool orchestration instead of embedding process plumbing in feature code.
-- Keep the current server-side MCP surface intact.
+### 🚀 Epic 2.2: Playwright DNS Rebinding Resistance (Gap G6 / R2-F02)
+*Goal: Eliminate browser-level DNS rebinding bypasses.*
 
-Acceptance criteria:
-- Tool-session setup and teardown are reusable from more than one call site.
-- Browser/fetch flows can opt into MCP-backed execution without duplicating session code.
+#### 🧩 Feature 2.2.1: Browser-Level DNS Resolution Pinning
+- **User Story 2.2.1.1**: As an auditor running rendered JavaScript audits, I want Playwright's underlying Chromium instances bound to pinned DNS resolutions to prevent rebinding attacks.
+  - **Tasks**:
+    - [ ] Configure Playwright Chromium instances in [src/core/scraping/zendriver.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/scraping/zendriver.ts) to route traffic through a secure local forward proxy or customize routing interceptors.
+    - [ ] Implement single-resolution host pinning at the proxy layer or within Playwright's `network` routing configuration.
+  - **BEADS Tracking**:
+    - **`B`**: Playwright/Chromium resolves target hosts independently, allowing DNS-rebinding attacks to bypass Node-level `ctx.route()` checks.
+    - **`E`**: [src/core/scraping/zendriver.ts:41-48](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/scraping/zendriver.ts#L41-L48) only checks host strings inside route handlers without enforcing connection-level pinning.
+    - **`S`**: Rebinding attacks (where host resolves to safe IP on first check and private IP on fetch) are reliably blocked by the pinned browser proxy.
 
-### Phase 4: Raise the quality bar to a documented target
+---
 
-- Declare the coverage threshold in the repo docs and CI gates.
-- Add any missing lint / format checks to the standard test command set.
-- Make the minimum supported verification sequence explicit for local development and release work.
+### 🚀 Epic 2.3: Subprocess Redirect Validation (Gap G7 / R2-F03)
+*Goal: Enforce SSRF validations on HTTP redirects followed by external subprocess engines.*
 
-Acceptance criteria:
-- Coverage target is visible in the repo docs and enforced in automation.
-- Quality checks run from documented commands without tribal knowledge.
+#### 🧩 Feature 2.3.1: Obscura Subprocess Redirect Governance
+- **User Story 2.3.1.1**: As an auditor running fast-path compiled audits, I want all redirect targets validated before execution so that external binaries cannot bypass the SSRF guard by following internal redirects.
+  - **Tasks**:
+    - [ ] Pass the `--no-redirect` flag to the `bin/obscura` compiled Rust process spawned in [src/core/scraping/fetcher.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/scraping/fetcher.ts).
+    - [ ] Execute all redirect tracking and validation inside the Node engine, passing only verified final destination URLs to the subprocess.
+  - **BEADS Tracking**:
+    - **`B`**: The compiled `bin/obscura` subprocess follows HTTP redirects natively, allowing malicious targets to redirect execution to banned loopback/private ranges.
+    - **`E`**: [src/core/scraping/fetcher.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/scraping/fetcher.ts) passes target URLs straight to the subprocess without disabling internal redirect handling.
+    - **`S`**: A redirect pointing to `http://127.0.0.1:8080` is detected at the Node layer and blocked before reaching the subprocess.
 
-### Phase 5: Verify feature parity and regressions
+---
 
-- Add regression tests for the registry, cache adapter, MCP client wrapper, and coverage gate behavior.
-- Re-run the full test suite after each phase.
-- Confirm that existing release-safe defaults remain unchanged.
+## 🗂️ Category 3: Concurrency & Storage Reliability
 
-Acceptance criteria:
-- New tests pass.
-- Existing tests continue to pass.
-- No release artifact or secret-hygiene regressions are introduced.
+### 🚀 Epic 3.1: Crawler Queue POP Concurrency (Gap G8 / R2-F04)
+*Goal: Prevent concurrent workers from crawling identical pages due to DuckDB queue POP race conditions.*
 
-## Traceability Summary
+#### 🧩 Feature 3.1.1: Atomic Database URL Retrieval
+- **User Story 3.1.1.1**: As a crawler node running multiple worker threads, I want URL pops from the crawl queue database to be atomic to eliminate duplicate crawls and resource waste.
+  - **Tasks**:
+    - [ ] Implement an in-memory orchestration lock or transaction write-retry loop using DuckDB in [src/core/crawler.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/crawler.ts).
+    - [ ] Rewrite the retrieve query to ensure exclusive row assignment to workers.
+  - **BEADS Tracking**:
+    - **`B`**: DuckDB lacks row-level locking or `SKIP LOCKED`, causing parallel workers to pull the same URL in concurrent query phases.
+    - **`E`**: [src/core/crawler.ts:107-126](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/crawler.ts#L107-L126) pops rows in separate read/update sequences.
+    - **`S`**: Crawling 100 mock URLs using 10 concurrent workers produces exactly 1 fetch per URL with zero duplicate operations.
 
-| Gap ID | Disposition | Plan section | Why |
-|---|---|---|---|
-| G1 | Must-fix | Phase 1 | The node repo already has evaluator functionality, but the Python repo’s plugin model exposes a clearer extension boundary that is missing here |
-| G2 | Must-fix | Phase 2 | PageSpeed is a core enrichment path; the cache contract needs to be explicit and testable |
-| G3 | Must-fix | Phase 3 | Autonomous MCP orchestration is a distinct capability in the Python repo and still needs a reusable client boundary here |
-| G4 | Bundle | Phase 4 | The node repo already has quality scripts; this is a contract-strengthening gap, not a product blocker |
+---
 
-## Notes
+### 🚀 Epic 3.2: Cache Write-Contention Handling (Gap G2)
+*Goal: Prevent PageSpeed cache write failures under high load.*
 
-- The node repo is ahead in Rust-native MCP and ontology ownership; that work is already the preferred path and is not a gap.
-- This plan intentionally avoids changing the public release boundary work in `docs/phase-wise-backlog.md`.
-- If future comparison work shows additional Python-only behaviors that are not covered here, add them as new gap IDs rather than expanding unrelated phases.
+#### 🧩 Feature 3.2.1: Contention-Safe PageSpeed Caching
+- **User Story 3.2.1.1**: As an analytical crawler, I want PageSpeed cache writes protected by transactions and retry-backoffs to prevent DuckDB lock contention from crashing the process.
+  - **Tasks**:
+    - [ ] Implement robust transactional block handling and retry-on-contention loops inside [src/core/pagespeedCache.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/pagespeedCache.ts).
+    - [ ] Add stale-entry rejection and cache hit logging.
+  - **BEADS Tracking**:
+    - **`B`**: High-concurrency audits attempting to write metrics simultaneously to the DuckDB cache can encounter write-lock failures.
+    - **`E`**: [src/core/cache.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/cache.ts) has no exponential backoff or lock-contention handler.
+    - **`S`**: 50 concurrent audits write successfully to the database cache under stress testing with zero transaction aborts.
+
+---
+
+## 🗂️ Category 4: Process Lifecycle & Quality Engineering
+
+### 🚀 Epic 4.1: CLI Process Hanging (Gap G9 / R2-F05)
+*Goal: Ensure clean teardown of Playwright browser processes on audit completion or failure.*
+
+#### 🧩 Feature 4.1.1: Browser Pool Teardown Hook
+- **User Story 4.1.1.1**: As a CLI user, I want the audit tool to close all Playwright child processes on exit so that my system is not bogged down by orphaned Chromium processes.
+  - **Tasks**:
+    - [ ] Wire `BrowserPool.getInstance().close()` into the `finally` blocks of the main CLI evaluate workflow in [src/cli.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/cli.ts).
+    - [ ] Refactor [src/core/scraping/selectorHealer.ts](file:///Users/neo/projects/stealth-lightbeacon-node/src/core/scraping/selectorHealer.ts) and render modules to cleanly release browser contexts.
+  - **BEADS Tracking**:
+    - **`B`**: Exiting evaluate runs leave Chromium processes running, holding system memory and keeping Node's event loop alive.
+    - **`E`**: [src/cli.ts:206-212](file:///Users/neo/projects/stealth-lightbeacon-node/src/cli.ts#L206-L212) has no reference to closing `BrowserPool` on completion.
+    - **`S`**: Executing an audit terminates all Playwright/Chromium processes cleanly; command line execution exits immediately with code 0 on success.
+
+---
+
+### 🚀 Epic 4.2: Strict Parity Quality Gate (Gap G4)
+*Goal: Enforce strict test and quality boundaries to match the legacy Python release contract.*
+
+#### 🧩 Feature 4.2.1: Automated CI Coverage Gating
+- **User Story 4.2.1.1**: As a contributor, I want the build pipeline to reject commits that fail coverage limits or trigger lint errors.
+  - **Tasks**:
+    - [ ] Configure [tools/check-coverage.js](file:///Users/neo/projects/stealth-lightbeacon-node/tools/check-coverage.js) to enforce `line >= 80%`, `branch >= 65%`, and `function >= 75%`.
+    - [ ] Configure `npm run coverage:check` as a pre-commit block.
+    - [ ] Link these checks to Github, GitLab, and Bitbucket runner configs.
+  - **BEADS Tracking**:
+    - **`B`**: Lack of automated CI coverage boundaries allows code quality to drop over time.
+    - **`E`**: Coverage scripts exist in `package.json` but are not integrated as blocking gates in CI pipelines.
+    - **`S`**: Commits dropping test coverage are automatically blocked by the pipeline runner.
+
+---
+
+## 📊 Traceability Summary & Findings Integration
+
+| Gap / Finding ID | Severity | Summary | Category | Action Taken |
+| :--- | :--- | :--- | :--- | :--- |
+| **G1** | HIGH | Lacks explicit evaluator plugin registry | Category 1 | Added Epic 1.1: Registry-backed evaluator dynamic loader |
+| **G2** | MEDIUM | PageSpeed cache lacks write-contention handling | Category 3 | Added Epic 3.2: Contention-safe caching with retry-backoff |
+| **G3** | HIGH | Lacks dedicated client wrapper for agent MCP sessions | Category 1 | Added Epic 1.2: Reusable `StealthMcpClient` wrapper |
+| **G4** | MEDIUM | Quality checks are undocumented and unblocked in CI | Category 4 | Added Epic 4.2: Strict automated coverage gates |
+| **R2-F01** | CRITICAL | SSRF IP rewriting causes HTTPS TLS mismatch | Category 2 | Added Epic 2.1: Custom `SSRFGuardAgent` socket pinning |
+| **R2-F02** | CRITICAL | Playwright Chromium engine vulnerable to DNS rebinding | Category 2 | Added Epic 2.2: Browser-level DNS resolution pinning proxy |
+| **R2-F03** | CRITICAL | Rust subprocess bypasses SSRF validation on redirects | Category 2 | Added Epic 2.3: Subprocess redirect governance |
+| **R2-F04** | HIGH | Crawler Pop suffers DuckDB concurrency race condition | Category 3 | Added Epic 3.1: Atomic worker queue selection |
+| **R2-F05** | HIGH | Browser pool is not torn down, hanging CLI runs | Category 4 | Added Epic 4.1: Finally teardown hooks for `BrowserPool` |
+| **R2-F06** | MEDIUM | PageSpeed API keys passed in URL parameters | Category 2 | Folded into Epic 2.1: Shift API key transfer to headers |
+| **R2-F07** | MEDIUM | Synchronous database disconnects block event loop | Category 3 | Folded into Epic 3.1: Transition to async DuckDB wrappers |
+| **R2-F08** | MEDIUM | VARCHAR storage for numeric Unix epoch timestamps | Category 3 | Folded into Epic 3.1: Optimize cache database schema fields |
+| **R2-F09** | MEDIUM | Unbounded browser contexts risk crashes under load | Category 4 | Folded into Epic 4.1: Cap maximum browser instances |
+| **R2-F10** | MEDIUM | Rust binary portability issues across platforms | Category 2 | Folded into Epic 2.3: Provide pure JS fallback engine |
+| **R2-F11** | MEDIUM | Web Service Workers bypass frame route interceptors | Category 2 | Folded into Epic 2.2: Enforce proxy-level DNS blocks |
+| **R2-F12** | MEDIUM | Dynamic imports bypass TypeScript compilers | Category 1 | Folded into Epic 1.1: Resolve via ts-loader standard imports |
+
+- **Final Recommendation:** `Human review required` (Critical security fixes G5-G7 require architectural decision sign-off).
+- **Dissent Ledger:** None.
+
+---
+
+## 📋 Prioritized Action Items
+
+| Priority | Owner | Action | Source finding |
+| :--- | :--- | :--- | :--- |
+| **P0** | Implementer | Build `SSRFGuardAgent` and refactor fetcher socket-pinning | R2-F01 |
+| **P0** | Implementer | Add DNS proxy / router pinning to Playwright browser pool | R2-F02 |
+| **P0** | Implementer | Enforce redirect validations at the Node level for Obscura subprocesses | R2-F03 |
+| **P1** | Implementer | Refactor DuckDB pop queue to execute atomically | R2-F04 |
+| **P1** | Implementer | Add `BrowserPool.close()` hooks in `finally` CLI evaluate loops | R2-F05 |
+| **P2** | Implementer | Implement formal `EvaluatorRegistry` plugin registry | G1 |
+| **P2** | Implementer | Add exponential retry-backoffs to analytical PageSpeed caches | G2 |
+| **P2** | Implementer | Integrate `StealthMcpClient` wrapper for agent tool sessions | G3 |
+| **P2** | Implementer | Configure CI coverage check gates | G4 |

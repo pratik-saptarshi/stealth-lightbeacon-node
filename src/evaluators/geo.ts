@@ -147,6 +147,14 @@ export class GeoEvaluator implements Evaluator {
       }
     });
 
+    // Check microdata author & recency
+    if ($('[itemprop="author"]').length > 0) {
+      hasSchemaAuthor = true;
+    }
+    if ($('[itemprop="datePublished"]').length > 0 || $('[itemprop="dateModified"]').length > 0) {
+      hasSchemaRecency = true;
+    }
+
     const hasAuthorHTML = $('[class*="author"], [class*="byline"], [rel="author"]').length > 0 || $('meta[name="author"]').length > 0;
     const hasAuthor = hasAuthorHTML || hasSchemaAuthor;
 

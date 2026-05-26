@@ -46,3 +46,56 @@ test('SSRFGuard allows private addresses when explicitly configured', async () =
   await assert.doesNotReject(() => guard.validate('http://10.0.0.1/internal'));
   await assert.doesNotReject(() => guard.validate('http://[::1]/internal'));
 });
+
+test('SSRFGuardHttpAgent and SSRFGuardHttpsAgent socket pinning', async () => {
+  const mod = await loadModule(path.join('core', 'ssrf.js'));
+  const guard = new mod.SSRFGuard({ allowPrivate: true });
+
+  const agents = mod.getSSRFGuardAgents(guard);
+  assert.ok(agents.httpAgent);
+  assert.ok(agents.httpsAgent);
+
+  // Throws if not pre-validated
+  assert.throws(() => {
+    agents.httpAgent.createConnection({ host: 'example.com' });
+  }, /Unvalidated host/);
+
+  // Mock net.createConnection and tls.connect to prevent outbound network calls
+  const net = require('node:net');
+  const tls = require('node:tls');
+  const originalCreateConnection = net.createConnection;
+  const originalTlsConnect = tls.connect;
+
+  let netCalled = false;
+  let tlsCalled = false;
+
+  net.createConnection = (options, cb) => {
+    netCalled = true;
+    if (cb) cb();
+    return { destroy: () => {} };
+  };
+
+  tls.connect = (options, cb) => {
+    tlsCalled = true;
+    if (cb) cb();
+    return { destroy: () => {} };
+  };
+
+  try {
+    // Manually populate dnsCache to bypass async DNS lookup
+    mod.SSRFGuard.dnsCache.set('example.com', '93.184.216.34');
+
+    const socket = agents.httpAgent.createConnection({ host: 'example.com', port: 80 });
+    assert.ok(socket);
+    assert.ok(netCalled);
+    socket.destroy();
+
+    const secureSocket = agents.httpsAgent.createConnection({ host: 'example.com', port: 443 });
+    assert.ok(secureSocket);
+    assert.ok(tlsCalled);
+    secureSocket.destroy();
+  } finally {
+    net.createConnection = originalCreateConnection;
+    tls.connect = originalTlsConnect;
+  }
+});
