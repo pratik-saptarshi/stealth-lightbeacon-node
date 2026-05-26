@@ -27,15 +27,18 @@ class PageSpeedService {
         }
         const apiUrl = new URL(PAGE_SPEED_API_URL);
         apiUrl.searchParams.set('url', url);
-        apiUrl.searchParams.set('key', apiKey);
         apiUrl.searchParams.set('category', 'PERFORMANCE');
         apiUrl.searchParams.set('strategy', 'mobile');
+        const headers = {};
+        if (apiKey) {
+            headers['X-Goog-Api-Key'] = apiKey;
+        }
         let payload = null;
         let lastError = null;
         let delay = 1000;
         for (let attempt = 1; attempt <= 3; attempt++) {
             try {
-                const res = await fetch(apiUrl, { method: 'GET' });
+                const res = await fetch(apiUrl, { method: 'GET', headers });
                 if (res.status === 429) {
                     throw new Error('HTTP 429 Rate Limited');
                 }

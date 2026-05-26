@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.runAudit = runAudit;
 const node_crypto_1 = require("node:crypto");
 const crawler_1 = require("./crawler");
+const evaluatorRegistry_1 = require("./evaluatorRegistry");
 async function runAudit(input) {
     const runId = (0, node_crypto_1.randomUUID)();
     const startedAt = new Date().toISOString();
@@ -28,9 +29,17 @@ async function runAudit(input) {
             });
         }
     }
+    const registry = (0, evaluatorRegistry_1.createDefaultEvaluatorRegistry)();
+    const baseEvaluators = input.evaluators && input.evaluators.length > 0
+        ? input.evaluators
+        : registry.createEvaluators();
+    const filterIds = input.options.evaluators;
+    const evaluatorsToRun = filterIds && filterIds.length > 0
+        ? baseEvaluators.filter((e) => filterIds.includes(e.id))
+        : baseEvaluators;
     const resultsByEvaluator = new Map();
     for (const page of crawl.pages) {
-        for (const evaluator of input.evaluators) {
+        for (const evaluator of evaluatorsToRun) {
             const result = await evaluator.evaluate({
                 url: page.url,
                 html: page.html,

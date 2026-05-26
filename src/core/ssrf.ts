@@ -1,5 +1,9 @@
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
+import * as http from 'node:http';
+import * as https from 'node:https';
+import * as net from 'node:net';
+import * as tls from 'node:tls';
 
 const IPV4_PRIVATE_RANGES = [
   { start: '10.0.0.0', end: '10.255.255.255' },
@@ -53,6 +57,7 @@ export class SSRFGuard {
       if (!this.allowPrivate && isPrivateAddress(cleanHost)) {
         throw new SSRFViolationError(`Blocked private or loopback address: ${cleanHost}`);
       }
+      SSRFGuard.dnsCache.set(host, cleanHost);
       return;
     }
 
@@ -90,4 +95,56 @@ function isPrivateAddress(ipAddress: string): boolean {
     return isPrivateIpv6(ipAddress);
   }
   return false;
+}
+
+export class SSRFGuardHttpAgent extends http.Agent {
+  constructor(private readonly guard: SSRFGuard, options?: http.AgentOptions) {
+    super(options);
+  }
+
+  override createConnection(options: any, callback: any): any {
+    const host = options.host || options.hostname;
+    const pinnedIp = this.guard.getPinnedAddress(host);
+    if (!pinnedIp) {
+      const err = new SSRFViolationError(`Unvalidated host: ${host}`);
+      if (callback) {
+        callback(err);
+      }
+      throw err;
+    }
+    options.host = pinnedIp;
+    options.hostname = pinnedIp;
+    return net.createConnection(options, callback);
+  }
+}
+
+export class SSRFGuardHttpsAgent extends https.Agent {
+  constructor(private readonly guard: SSRFGuard, options?: https.AgentOptions) {
+    super(options);
+  }
+
+  override createConnection(options: any, callback: any): any {
+    const host = options.host || options.hostname;
+    const pinnedIp = this.guard.getPinnedAddress(host);
+    if (!pinnedIp) {
+      const err = new SSRFViolationError(`Unvalidated host: ${host}`);
+      if (callback) {
+        callback(err);
+      }
+      throw err;
+    }
+    options.host = pinnedIp;
+    options.hostname = pinnedIp;
+    if (!options.servername) {
+      options.servername = host;
+    }
+    return tls.connect(options, callback);
+  }
+}
+
+export function getSSRFGuardAgents(guard: SSRFGuard) {
+  return {
+    httpAgent: new SSRFGuardHttpAgent(guard),
+    httpsAgent: new SSRFGuardHttpsAgent(guard)
+  };
 }

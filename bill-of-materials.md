@@ -4,14 +4,15 @@ This document details all active components, engines, features, and library depe
 
 ## 1. Core Crawler & Orchestration Architecture
 
-* **Async Bounded Crawler**: Worker-pool BFS crawler with strict concurrency throttling limits, queue wake-up triggers, and robust network event loop preservation.
+* **Async Bounded Crawler**: Worker-pool BFS crawler with strict concurrency throttling limits, queue wake-up triggers, robust network event loop preservation, and **Mutex-Protected Queue POP** to prevent concurrent worker crawl duplication.
 * **Broken Page Mapper**: Dedicated failure tracker isolating non-200 HTTP responses without breaking or stalling the primary crawling cycle.
-* **SSRF Guard**: Pre- and post-redirect IP filter guarding all loopback, private (RFC 1918), and link-local address spaces to prevent Server-Side Request Forgery.
+* **SSRF Guard & SSRFGuardAgent**: Pre- and post-redirect IP filter guarding all loopback, private (RFC 1918), and link-local address spaces. Leverages Node `createConnection` socket pinning to neutralize DNS-rebinding (TOCTOU) exploits without tampering with TLS Host or SNI checks.
 * **Scraping Engine Factory**:
-  - `http`: Lightweight HTTP client with custom User-Agent headers and automatic redirect tracing.
-  - `rendered`: Basic headless Playwright browser rendering client.
-  - `fast`: Subprocess bridge connecting to a native Rust `obscura` executable with advanced HTTP/2 browser-spoofing logic.
+  - `http`: Lightweight HTTP client secured by `SSRFGuardAgent`.
+  - `rendered`: Headless Playwright Chromium engine secured by loopback forwarding DNS-pinning proxies.
+  - `fast`: Subprocess bridge connecting to a native Rust `obscura` executable, featuring strict redirect boundary limits enforced by child-process wrappers.
   - `stealth`: Premium Playwright driver featuring customized WebDriver flag suppression, WebGL fingerprint spoofing, and standard browser plugin emulation.
+* **Evaluator Registry**: Dynamic plugin registry exposing contract-backed registries, type-safe lifecycle hooks, and execution-order pipelines.
 
 ## 2. Multi-Domain Audit Evaluators
 
@@ -69,3 +70,9 @@ The platform leverages several industry-standard libraries to provide secure, ro
 | `ora` | Elegant CLI loading spinner and status feedback | MIT |
 | `robots-parser` | Standard robots.txt syntax parser | MIT |
 | `zod` | Safe runtime types and strict input schema boundaries | MIT |
+
+## 4. Release & Validation Automation
+
+* **Quality Gatekeeper Script (`tools/release.sh`)**: Enforces validation before committing or pushing releases. Runs full typecheck, unit tests, contract tests, and CI coverage verification.
+* **Semantic Release Config (`.release-it.json`)**: Automates version bumping, `CHANGELOG.md` generation, git tag creation, origin branch pushing, and GitHub Release drafting.
+

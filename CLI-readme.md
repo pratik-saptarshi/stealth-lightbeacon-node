@@ -203,9 +203,8 @@ Symptom:
 - `Could not set lock on file ... pagespeed.duckdb ... Conflicting lock is held ...`
 
 Action:
-- ensure previous audit process has exited,
-- terminate stale holder process if needed,
-- rerun the domain audit.
+- **Automatic Handling**: The engine includes built-in transaction contention handling and exponential write backoffs (retrying up to 5 times) to automatically resolve parallel write surges.
+- **Manual Intervention**: If persistent, check if a stale or background audit process is still holding a lock, terminate it, and rerun the command.
 
 ### 7.3 Network reachability drift
 

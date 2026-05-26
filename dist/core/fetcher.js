@@ -37,11 +37,11 @@ exports.createFetchPage = createFetchPage;
 exports.requestSecurePinned = requestSecurePinned;
 exports.fetchHttpPage = fetchHttpPage;
 exports.discoverBrokenLinks = discoverBrokenLinks;
+exports.secureFetch = secureFetch;
 const cheerio = __importStar(require("cheerio"));
 const http = __importStar(require("node:http"));
 const https = __importStar(require("node:https"));
-const dns = __importStar(require("node:dns"));
-const node_net_1 = require("node:net");
+const ssrf_1 = require("./ssrf");
 const factory_1 = require("./scraping/factory");
 const DEFAULT_USER_AGENT = 'StealthLightbeaconNode/2.0';
 function createFetchPage(options = {}) {
@@ -62,27 +62,9 @@ function requestSecurePinned(urlStr, options) {
             headers: options.headers,
             rejectUnauthorized: true
         };
-        const pinnedIp = options.pinnedIp;
-        const pinnedFamily = pinnedIp ? (0, node_net_1.isIP)(pinnedIp) : 0;
-        if (pinnedFamily > 0) {
-            reqOptions.lookup = (hostname, opts, callback) => {
-                const wantsAll = typeof opts === 'object' && opts !== null && 'all' in opts && Boolean(opts.all);
-                if (hostname === host) {
-                    if (wantsAll) {
-                        callback(null, [{ address: pinnedIp, family: pinnedFamily }]);
-                        return;
-                    }
-                    callback(null, pinnedIp, pinnedFamily);
-                }
-                else {
-                    if (wantsAll) {
-                        dns.lookup(hostname, normalizeLookupAllOptions(opts), callback);
-                        return;
-                    }
-                    dns.lookup(hostname, normalizeLookupOptions(opts), callback);
-                }
-            };
-        }
+        const guard = options.guard ?? new ssrf_1.SSRFGuard();
+        const agents = (0, ssrf_1.getSSRFGuardAgents)(guard);
+        reqOptions.agent = isHttps ? agents.httpsAgent : agents.httpAgent;
         const req = client.request(reqOptions, (res) => {
             const chunks = [];
             res.on('data', (chunk) => chunks.push(chunk));
@@ -144,7 +126,8 @@ async function fetchHttpPage(url, guard, userAgent, maxRedirects = 5) {
         response = await requestSecurePinned(currentUrl, {
             method: 'GET',
             headers: requestHeaders,
-            pinnedIp: pinnedIp ?? undefined
+            pinnedIp: pinnedIp ?? undefined,
+            guard
         });
         if (response.status >= 300 && response.status < 400) {
             const location = response.headers['location'];
@@ -234,4 +217,23 @@ function discoverBrokenLinks(html, baseUrl) {
         }
     });
     return [...links];
+}
+async function secureFetch(urlStr, options = {}) {
+    const guard = options.guard ?? new ssrf_1.SSRFGuard();
+    await guard.validate(urlStr);
+    const parsed = new URL(urlStr);
+    const pinnedIp = guard.getPinnedAddress(parsed.hostname);
+    const res = await requestSecurePinned(urlStr, {
+        method: options.method,
+        headers: options.headers,
+        pinnedIp: pinnedIp ?? undefined,
+        guard
+    });
+    return {
+        ok: res.status >= 200 && res.status < 300,
+        status: res.status,
+        headers: res.headers,
+        text: () => res.text(),
+        json: async () => JSON.parse(await res.text())
+    };
 }

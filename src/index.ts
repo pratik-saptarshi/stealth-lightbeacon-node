@@ -6,4 +6,4 @@ export { validateBudgets } from './core/budget';
 export { createDefaultEvaluators } from './core/defaultEvaluators';
 export { listDefaultEvaluatorPlugins } from './core/defaultEvaluators';
 export { createMcpServer } from './mcp/protocol';
-export { ProcessJsonRpcClient } from './mcp/protocol';
+export { ProcessJsonRpcClient, StealthMcpClient } from './mcp/protocol';

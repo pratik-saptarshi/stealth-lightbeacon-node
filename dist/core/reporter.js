@@ -18,6 +18,68 @@ class Reporter {
         (0, node_fs_1.writeFileSync)(outputPath, JSON.stringify(report, null, 2), 'utf8');
         return outputPath;
     }
+    writeLlm(report) {
+        (0, node_fs_1.mkdirSync)(this.outputDir, { recursive: true });
+        const outputPath = (0, node_path_1.join)(this.outputDir, 'report.llm.md');
+        let md = `# Audit Report: ${report.targetUrl}\n\n`;
+        const sum = summarize(report);
+        md += `<summary>\n`;
+        md += `- Total Issues: ${sum.totalIssues}\n`;
+        md += `- Critical: ${sum.critical}\n`;
+        md += `- Warning: ${sum.warning}\n`;
+        md += `- Info: ${sum.info}\n`;
+        md += `- Average Score: ${sum.averageScore}/10\n`;
+        md += `</summary>\n\n`;
+        for (const domain of report.domains) {
+            md += `<domain id="${domain.id}" name="${domain.domain}" score="${domain.score}">\n`;
+            if (domain.issues.length === 0) {
+                md += `  No issues detected.\n`;
+            }
+            else {
+                for (const issue of domain.issues) {
+                    md += `  <issue id="${issue.id}" severity="${issue.severity}">\n`;
+                    md += `    <message>${issue.message}</message>\n`;
+                    md += `    <location>${issue.location}</location>\n`;
+                    md += `    <remedy>${issue.remedy}</remedy>\n`;
+                    md += `  </issue>\n`;
+                }
+            }
+            md += `</domain>\n\n`;
+        }
+        (0, node_fs_1.writeFileSync)(outputPath, md, 'utf8');
+        return outputPath;
+    }
+    writeGeoXml(report) {
+        (0, node_fs_1.mkdirSync)(this.outputDir, { recursive: true });
+        const outputPath = (0, node_path_1.join)(this.outputDir, 'report.xml');
+        let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+        xml += `<audit_report target="${escapeXml(report.targetUrl)}">\n`;
+        const sum = summarize(report);
+        xml += `  <summary>\n`;
+        xml += `    <total_issues>${sum.totalIssues}</total_issues>\n`;
+        xml += `    <critical>${sum.critical}</critical>\n`;
+        xml += `    <warning>${sum.warning}</warning>\n`;
+        xml += `    <info>${sum.info}</info>\n`;
+        xml += `    <average_score>${sum.averageScore}</average_score>\n`;
+        xml += `  </summary>\n`;
+        for (const domain of report.domains) {
+            xml += `  <domain id="${escapeXml(domain.id)}" score="${domain.score}">\n`;
+            xml += `    <name>${escapeXml(domain.domain)}</name>\n`;
+            xml += `    <issues>\n`;
+            for (const issue of domain.issues) {
+                xml += `      <issue id="${escapeXml(issue.id)}" severity="${escapeXml(issue.severity)}">\n`;
+                xml += `        <message>${escapeXml(issue.message)}</message>\n`;
+                xml += `        <location>${escapeXml(issue.location)}</location>\n`;
+                xml += `        <remedy>${escapeXml(issue.remedy)}</remedy>\n`;
+                xml += `      </issue>\n`;
+            }
+            xml += `    </issues>\n`;
+            xml += `  </domain>\n`;
+        }
+        xml += `</audit_report>\n`;
+        (0, node_fs_1.writeFileSync)(outputPath, xml, 'utf8');
+        return outputPath;
+    }
     writeHtml(report) {
         (0, node_fs_1.mkdirSync)(this.outputDir, { recursive: true });
         const outputPath = (0, node_path_1.join)(this.outputDir, 'report.html');
@@ -172,3 +234,15 @@ const DEFAULT_REPORT_TEMPLATE = `<!doctype html>
     </main>
   </body>
 </html>`;
+function escapeXml(unsafe) {
+    return unsafe.replace(/[<>&'"]/g, (c) => {
+        switch (c) {
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '&': return '&amp;';
+            case '\'': return '&apos;';
+            case '"': return '&quot;';
+            default: return c;
+        }
+    });
+}

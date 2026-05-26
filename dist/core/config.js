@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.engineSchema = exports.reportFormatSchema = void 0;
 exports.loadRuntimeOptions = loadRuntimeOptions;
 const zod_1 = require("zod");
-exports.reportFormatSchema = zod_1.z.enum(['json', 'html', 'both']);
+exports.reportFormatSchema = zod_1.z.enum(['json', 'html', 'both', 'llm', 'geo-xml']);
 exports.engineSchema = zod_1.z.enum(['http', 'rendered', 'fast', 'stealth']);
 const runtimeOptionsSchema = zod_1.z.object({
     outputDir: zod_1.z.string().default('.'),

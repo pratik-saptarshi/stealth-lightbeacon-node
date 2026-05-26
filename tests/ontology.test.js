@@ -26,7 +26,8 @@ Module._load = function patchedLoad(request, parent, isMain) {
 };
 
 async function loadModule(relativePath) {
-  const fullPath = path.join(__dirname, '..', 'src', relativePath);
+  const resolvedPath = relativePath.replace(/\.ts$/, '.js');
+  const fullPath = path.join(__dirname, '..', 'dist', resolvedPath);
   try {
     return require(fullPath);
   } catch (error) {

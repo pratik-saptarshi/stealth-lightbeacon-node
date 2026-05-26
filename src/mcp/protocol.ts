@@ -2,7 +2,7 @@ export {
   createMcpServer,
   runStdioMcpServer
 } from './server';
-export { ProcessJsonRpcClient } from './client';
+export { ProcessJsonRpcClient, StealthMcpClient } from './client';
 export type {
   CreateMcpServerOptions,
   JsonRpcRequest,

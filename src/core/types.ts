@@ -53,7 +53,10 @@ export interface AuditReport {
 export interface Evaluator {
   id: string;
   domain: string;
+  description?: string;
+  prerequisites?: string[];
   evaluate(context: EvaluationContext): Promise<DomainResult>;
+  run?(context: EvaluationContext): Promise<DomainResult>;
 }
 
 const severityPenalty: Record<Severity, number> = {

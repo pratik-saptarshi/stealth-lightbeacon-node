@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { crawlSite, type CrawledPage } from './crawler';
 import type { AuditReport, DomainResult, Evaluator } from './types';
+import { createDefaultEvaluatorRegistry } from './evaluatorRegistry';
 
 export interface RunAuditInput {
   targetUrl: string;
@@ -9,9 +10,10 @@ export interface RunAuditInput {
     maxUrls: number;
     concurrency?: number;
     throttleMs?: number;
+    evaluators?: string[];
   };
   fetchPage: (url: string) => Promise<CrawledPage>;
-  evaluators: Evaluator[];
+  evaluators?: Evaluator[];
   enrichContext?: (page: CrawledPage) => Promise<Partial<Parameters<Evaluator['evaluate']>[0]>>;
   persistence?: AuditPersistence;
 }
@@ -68,10 +70,20 @@ export async function runAudit(input: RunAuditInput): Promise<AuditReport> {
     }
   }
 
+  const registry = createDefaultEvaluatorRegistry();
+  const baseEvaluators = input.evaluators && input.evaluators.length > 0
+    ? input.evaluators
+    : registry.createEvaluators();
+
+  const filterIds = input.options.evaluators;
+  const evaluatorsToRun = filterIds && filterIds.length > 0
+    ? baseEvaluators.filter((e) => filterIds.includes(e.id))
+    : baseEvaluators;
+
   const resultsByEvaluator = new Map<string, DomainResult[]>();
 
   for (const page of crawl.pages) {
-    for (const evaluator of input.evaluators) {
+    for (const evaluator of evaluatorsToRun) {
       const result = await evaluator.evaluate({
         url: page.url,
         html: page.html,

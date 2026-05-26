@@ -1,0 +1,59 @@
+name: Stealth Lightbeacon Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'The target URL to audit'
+        required: true
+        type: string
+      crawl_depth:
+        description: 'Crawl depth limit'
+        required: false
+        default: '1'
+        type: string
+      max_urls:
+        description: 'Maximum number of URLs to crawl'
+        required: false
+        default: '5'
+        type: string
+  schedule:
+    - cron: '0 0 * * *' # Run nightly
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run audit
+        env:
+          AUDIT_TARGET_URL: ${{ inputs.target_url || 'https://example.com' }}
+          AUDIT_CRAWL_DEPTH: ${{ inputs.crawl_depth || '1' }}
+          AUDIT_MAX_URLS: ${{ inputs.max_urls || '5' }}
+        run: |
+          npx stealth-lightbeacon audit "$AUDIT_TARGET_URL" \
+            --depth "$AUDIT_CRAWL_DEPTH" \
+            --max-urls "$AUDIT_MAX_URLS" \
+            --format both \
+            --output-dir ./audit-results
+
+      - name: Archive audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stealth-lightbeacon-reports
+          path: ./audit-results/

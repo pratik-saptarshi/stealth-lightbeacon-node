@@ -81,7 +81,6 @@ export async function crawlSite(options: CrawlSiteOptions): Promise<CrawlResult>
   let activeCount = 0;
   const queueResolvers: (() => void)[] = [];
   const popMutex = new Mutex();
-  const activeProcessingUrls = new Set<string>();
 
   const notifyQueueChanged = () => {
     while (queueResolvers.length > 0) {
@@ -124,60 +123,52 @@ export async function crawlSite(options: CrawlSiteOptions): Promise<CrawlResult>
   };
 
   const nextEntry = async (): Promise<{ url: string; depth: number } | null> => {
-    return await popMutex.runExclusive(async () => {
-      while (true) {
-        const completed = await getCompletedCount();
-        if (completed >= options.maxUrls) {
-          return null;
-        }
+    while (true) {
+      const completed = await getCompletedCount();
+      if (completed >= options.maxUrls) {
+        return null;
+      }
 
-        const pending = await getPendingCount();
-        if (pending === 0) {
-          if (activeCount === 0) {
-            return null;
-          }
-          popMutex.release();
-          await new Promise<void>((resolve) => {
-            queueResolvers.push(resolve);
-          });
-          await popMutex.acquire();
-          continue;
-        }
-
+      // 1. Try to pop atomically
+      const popped = await popMutex.runExclusive(async () => {
         const result = await duck.query({
           sql: `
-            SELECT url, depth 
-            FROM crawl_queue 
-            WHERE status = 'pending' 
-            ORDER BY depth ASC
+            UPDATE crawl_queue 
+            SET status = 'fetching' 
+            WHERE url = (
+              SELECT url FROM crawl_queue 
+              WHERE status = 'pending' 
+              ORDER BY depth ASC 
+              LIMIT 1
+            )
+            RETURNING url, depth
           `
         });
-
-        const pendingRow = result.rows.find(row => !activeProcessingUrls.has(row.url as string));
-        if (!pendingRow) {
-          if (activeCount === 0) {
-            return null;
-          }
-          popMutex.release();
-          await new Promise<void>((resolve) => {
-            queueResolvers.push(resolve);
-          });
-          await popMutex.acquire();
-          continue;
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          return { url: row.url as string, depth: Number(row.depth) };
         }
+        return null;
+      });
 
-        const targetUrl = pendingRow.url as string;
-        activeProcessingUrls.add(targetUrl);
-
-        await duck.exec({
-          sql: `UPDATE crawl_queue SET status = 'fetching' WHERE url = ?`,
-          params: [targetUrl]
-        });
-
+      if (popped) {
         activeCount++;
-        return { url: targetUrl, depth: Number(pendingRow.depth) };
+        return popped;
       }
-    });
+
+      // 2. If nothing was popped, check if we are finished
+      if (activeCount === 0) {
+        const pending = await getPendingCount();
+        if (pending === 0) {
+          return null; // All workers idle and no pending work -> finished!
+        }
+      }
+
+      // 3. Otherwise, wait for the queue to change
+      await new Promise<void>((resolve) => {
+        queueResolvers.push(resolve);
+      });
+    }
   };
 
   const runWorker = async () => {
@@ -232,12 +223,12 @@ export async function crawlSite(options: CrawlSiteOptions): Promise<CrawlResult>
         });
         brokenPages.set(normalizedUrl, 0);
       } finally {
-        activeProcessingUrls.delete(normalizedUrl);
         activeCount--;
         notifyQueueChanged();
       }
     }
   };
+
 
   const workers: Promise<void>[] = [];
   for (let i = 0; i < concurrency; i++) {

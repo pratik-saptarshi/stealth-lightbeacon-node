@@ -53,3 +53,41 @@ test('ProcessJsonRpcClient correlates requests and responses', async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('StealthMcpClient completes handshake successfully and shuts down cleanly', async () => {
+  const mod = await loadModule(path.join('mcp', 'client.js'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-stealth-'));
+  const scriptPath = path.join(tmpDir, 'mock-server.js');
+  fs.writeFileSync(
+    scriptPath,
+    [
+      "const readline = require('node:readline');",
+      "const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });",
+      "rl.on('line', (line) => {",
+      "  const req = JSON.parse(line);",
+      "  if (req.method === 'initialize') {",
+      "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { protocolVersion: '2024-11-05', serverInfo: { name: 'mock', version: '1.0' } } }) + '\\n');",
+      "  } else if (req.method === 'shutdown') {",
+      "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { ok: true } }) + '\\n');",
+      "    process.exit(0);",
+      "  } else if (req.method === 'tools/call') {",
+      "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { content: [{ type: 'text', text: 'mcp-crawled' }] } }) + '\\n');",
+      "  }",
+      "});"
+    ].join('\n'),
+    'utf8'
+  );
+
+  const client = new mod.StealthMcpClient({
+    command: process.execPath,
+    commandArgs: [scriptPath]
+  });
+
+  try {
+    const result = await client.callTool('scrape', { url: 'https://example.com' });
+    assert.deepEqual(result, { content: [{ type: 'text', text: 'mcp-crawled' }] });
+  } finally {
+    await client.stop();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

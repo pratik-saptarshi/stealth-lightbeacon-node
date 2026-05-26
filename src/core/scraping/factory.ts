@@ -3,9 +3,10 @@ import { ZendriverEngine } from './zendriver';
 import { fetchHttpPage } from '../fetcher';
 import { SSRFGuard } from '../ssrf';
 import type { CrawledPage } from '../crawler';
+import { StealthMcpClient } from '../../mcp/client';
 
 export interface ScraperOptions {
-  engine?: 'http' | 'rendered' | 'fast' | 'stealth';
+  engine?: 'http' | 'rendered' | 'fast' | 'stealth' | 'mcp';
   allowPrivate?: boolean;
   userAgent?: string;
   timeoutMs?: number;
@@ -21,6 +22,14 @@ export function createScraper(options: ScraperOptions = {}): ScraperFunction {
   const guard = new SSRFGuard({ allowPrivate });
 
   switch (engine) {
+    case 'mcp':
+      const mcpClient = new StealthMcpClient();
+      return async (url: string) => {
+        await guard.validate(url);
+        const result = await mcpClient.callTool('scrape', { url });
+        return result as CrawledPage;
+      };
+
     case 'stealth':
       const zendriver = new ZendriverEngine({ allowPrivate, userAgent, timeoutMs });
       return (url: string) => zendriver.scrape(url);

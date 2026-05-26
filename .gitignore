@@ -24,3 +24,12 @@ integration_log.jsonl
 review_report.*
 review_panel_report.*
 *.tgz
+
+# Rust build artifacts
+target/
+
+# Local development environments and agents
+.agent/
+.agents/
+.colima/
+.lima/

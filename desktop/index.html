@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stealth Lightbeacon Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090a0f;
+      --panel: rgba(20, 22, 35, 0.6);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --primary: #8b5cf6;
+      --primary-glow: rgba(139, 92, 246, 0.4);
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --cyan: #06b6d4;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.12) 0%, transparent 45%);
+      background-attachment: fixed;
+    }
+
+    /* Elegant custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--primary);
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 40px 5% 20px;
+      -webkit-app-region: drag;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .logo-glow {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 15px var(--primary);
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 30%, #a78bfa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+
+    button {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(10px);
+    }
+
+    button:hover {
+      border-color: var(--primary);
+      box-shadow: 0 0 15px var(--primary-glow);
+      transform: translateY(-2px);
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
+      border: none;
+      box-shadow: 0 4px 15px var(--primary-glow);
+    }
+
+    button.primary:hover {
+      box-shadow: 0 4px 25px rgba(139, 92, 246, 0.6);
+    }
+
+    main {
+      padding: 20px 5% 50px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 30px;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(12px);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .card:hover::before {
+      opacity: 1;
+    }
+
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 2.2rem;
+      font-weight: 700;
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+    }
+
+    .score-circle {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      margin: 10px auto;
+    }
+
+    .score-circle svg {
+      width: 120px;
+      height: 120px;
+      transform: rotate(-90deg);
+    }
+
+    .score-circle circle {
+      fill: none;
+      stroke-width: 8;
+      stroke-linecap: round;
+    }
+
+    .score-circle .bg-circle {
+      stroke: rgba(255, 255, 255, 0.05);
+    }
+
+    .score-circle .val-circle {
+      stroke: var(--primary);
+      stroke-dasharray: 339.292;
+      stroke-dashoffset: 80; /* dynamic */
+      transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .score-center-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+      margin-top: 15px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--cyan) 100%);
+      border-radius: 3px;
+      width: 75%;
+      transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .audit-section {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 30px;
+    }
+
+    @media (max-width: 900px) {
+      .audit-section {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .panel-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.95rem;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge.improvement {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .badge.regression {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .badge.unchanged {
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    .badge-icon {
+      margin-right: 5px;
+      font-size: 0.9rem;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 15px var(--primary-glow);
+      }
+      50% {
+        transform: scale(1.2);
+        box-shadow: 0 0 25px rgba(139, 92, 246, 0.7);
+      }
+    }
+
+    .realtime-console {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 0.85rem;
+      color: var(--cyan);
+      max-height: 250px;
+      overflow-y: auto;
+      margin-top: 15px;
+    }
+
+    .console-line {
+      margin-bottom: 6px;
+      opacity: 0.85;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 0.85; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-container">
+      <div class="logo-glow"></div>
+      <h1>STEALTH LIGHTBEACON</h1>
+    </div>
+    <div class="header-actions">
+      <button onclick="compareAudits()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/></svg>
+        Compare Runs
+      </button>
+      <button class="primary" onclick="triggerAudit()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Run Site Audit
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <div class="dashboard-grid">
+      <!-- Security Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>Security Score</span>
+          <span style="color: var(--success)">✓ Secured</span>
+        </div>
+        <div class="score-circle">
+          <svg>
+            <circle class="bg-circle" cx="60" cy="60" r="54"></circle>
+            <circle class="val-circle" cx="60" cy="60" r="54" style="stroke-dashoffset: 34; stroke: var(--success)"></circle>
+          </svg>
+          <div class="score-center-text" style="color: var(--success)">90</div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" style="width: 90%; background: var(--success)"></div>
+        </div>
+      </div>
+
+      <!-- SEO Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>SEO Score</span>
+          <span style="color: var(--cyan)">Optimal</span>
+        </div>
+        <div class="score-circle">
+          <svg>
+            <circle class="bg-circle" cx="60" cy="60" r="54"></circle>
+            <circle class="val-circle" cx="60" cy="60" r="54" style="stroke-dashoffset: 50; stroke: var(--cyan)"></circle>
+          </svg>
+          <div class="score-center-text" style="color: var(--cyan)">85</div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" style="width: 85%; background: var(--cyan)"></div>
+        </div>
+      </div>
+
+      <!-- AEO/GEO Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>AEO / GEO readiness</span>
+          <span style="color: var(--primary)">High</span>
+        </div>
+        <div class="score-circle">
+          <svg>
+            <circle class="bg-circle" cx="60" cy="60" r="54"></circle>
+            <circle class="val-circle" cx="60" cy="60" r="54" style="stroke-dashoffset: 75; stroke: var(--primary)"></circle>
+          </svg>
+          <div class="score-center-text" style="color: var(--primary)">78</div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" style="width: 78%; background: var(--primary)"></div>
+        </div>
+      </div>
+
+      <!-- PageSpeed Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>UX & Performance</span>
+          <span style="color: var(--warning)">Average</span>
+        </div>
+        <div class="score-circle">
+          <svg>
+            <circle class="bg-circle" cx="60" cy="60" r="54"></circle>
+            <circle class="val-circle" cx="60" cy="60" r="54" style="stroke-dashoffset: 120; stroke: var(--warning)"></circle>
+          </svg>
+          <div class="score-center-text" style="color: var(--warning)">65</div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill" style="width: 65%; background: var(--warning)"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="audit-section">
+      <!-- Historical Comparative Diff Panel -->
+      <div class="card" style="grid-column: span 1;">
+        <div class="panel-header">
+          <h2 class="panel-title">Comparative Audit Regressions & Improvements</h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted);">Comparing run-A → run-B</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Classification</th>
+                <th>Issue ID</th>
+                <th>Diagnostic Finding</th>
+                <th>Location</th>
+              </tr>
+            </thead>
+            <tbody id="diff-rows">
+              <tr>
+                <td><span class="badge regression"><span class="badge-icon">▲</span>Regression</span></td>
+                <td><strong style="color: var(--danger)">SEC-SSRF-LOOPBACK</strong></td>
+                <td>SSRFGuard DNS Rebinding vulnerable target bypass enabled</td>
+                <td><code>ssrf.ts:32</code></td>
+              </tr>
+              <tr>
+                <td><span class="badge improvement"><span class="badge-icon">▼</span>Improvement</span></td>
+                <td><strong style="color: var(--success)">SEO-MISSING-DESC</strong></td>
+                <td>Meta description and semantic headings resolved</td>
+                <td><code>head</code></td>
+              </tr>
+              <tr>
+                <td><span class="badge unchanged"><span class="badge-icon">●</span>Unchanged</span></td>
+                <td><strong>UX-FONT-SMALL</strong></td>
+                <td>Main-body viewport elements utilize font sizes below 12px</td>
+                <td><code>body</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Real-time Auditing Console -->
+      <div class="card">
+        <div class="panel-header">
+          <h2 class="panel-title">Real-time Auditing Console</h2>
+        </div>
+        <div style="font-size: 0.9rem; color: var(--text-muted);">Live scraper processes, proxy network hooks, and analytical database logs.</div>
+        <div class="realtime-console" id="console">
+          <div class="console-line">[12:05:40] SecureProxy started on dynamic high-port: 62559</div>
+          <div class="console-line">[12:05:41] Playwright launched with single-process bypass</div>
+          <div class="console-line">[12:05:42] SSRFGuard resolving and pinning IP for target: https://example.com</div>
+          <div class="console-line">[12:05:43] Crawler pop URL: https://example.com/ (atomic state transaction)</div>
+          <div class="console-line">[12:05:44] Semantic evaluators executing in parallel...</div>
+          <div class="console-line">[12:05:45] DuckDB run persisting completed. Run ID: 7dc263cd-6e88</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    async function compareAudits() {
+      const consoleEl = document.getElementById('console');
+      const row = document.createElement('div');
+      row.className = 'console-line';
+      row.textContent = `[${new Date().toLocaleTimeString()}] Querying historical database comparative diffs...`;
+      consoleEl.appendChild(row);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+
+      // Invoke main process comparative queries
+      const response = await ipcRenderer.invoke('audit:compare', {
+        runIdA: 'run-A',
+        runIdB: 'run-B'
+      });
+
+      if (response && response.ok) {
+        const line = document.createElement('div');
+        line.className = 'console-line';
+        line.style.color = 'var(--success)';
+        line.textContent = `[${new Date().toLocaleTimeString()}] DuckDB comparative query complete! 0 regressions isolated.`;
+        consoleEl.appendChild(line);
+      } else {
+        const line = document.createElement('div');
+        line.className = 'console-line';
+        line.style.color = 'var(--danger)';
+        line.textContent = `[${new Date().toLocaleTimeString()}] Failed to diff runs: ${response?.error || 'Unknown error'}`;
+        consoleEl.appendChild(line);
+      }
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function triggerAudit() {
+      const consoleEl = document.getElementById('console');
+      const row = document.createElement('div');
+      row.className = 'console-line';
+      row.textContent = `[${new Date().toLocaleTimeString()}] Spawning multi-agent scraper workflow on target...`;
+      consoleEl.appendChild(row);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+stages:
+  - test
+
+image: node:20
+
+cache:
+  paths:
+    - .npm/
+
+before_script:
+  - npm ci --cache .npm --prefer-offline
+
+quality-checks:
+  stage: test
+  script:
+    - npm run build
+    - npm run quality:check

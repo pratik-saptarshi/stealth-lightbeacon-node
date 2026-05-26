@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ZendriverEngine = void 0;
 const ssrf_1 = require("../ssrf");
 const browserPool_1 = require("./browserPool");
-const fetcher_1 = require("../fetcher");
 class ZendriverEngine {
     timeoutMs;
     allowPrivate;
@@ -19,8 +18,7 @@ class ZendriverEngine {
         // 1. Pre-fetch SSRF validation
         await this.ssrfGuard.validate(url);
         const startTime = Date.now();
-        const browser = await browserPool_1.BrowserPool.getInstance().getBrowser();
-        const ctx = await browser.newContext({
+        const ctx = await browserPool_1.BrowserPool.getInstance().acquireContext({
             viewport: { width: 1920, height: 1080 },
             userAgent: this.userAgent,
             acceptDownloads: false,
@@ -29,34 +27,6 @@ class ZendriverEngine {
             timezoneId: 'America/New_York'
         });
         try {
-            // Fulfill every browser request in Node context to enforce dynamic IP pinning and prevent DNS rebinding
-            await ctx.route('**/*', async (route) => {
-                const req = route.request();
-                const reqUrl = req.url();
-                try {
-                    await this.ssrfGuard.validate(reqUrl);
-                    if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://')) {
-                        await route.continue();
-                        return;
-                    }
-                    const parsed = new URL(reqUrl);
-                    const host = parsed.hostname;
-                    const pinnedIp = this.ssrfGuard.getPinnedAddress(host);
-                    const response = await (0, fetcher_1.requestSecurePinned)(reqUrl, {
-                        method: req.method(),
-                        headers: req.headers(),
-                        pinnedIp: pinnedIp ?? undefined
-                    });
-                    await route.fulfill({
-                        status: response.status,
-                        headers: response.headers,
-                        body: await response.text()
-                    });
-                }
-                catch {
-                    await route.abort('blockedbyclient');
-                }
-            });
             // Bypass webdriver detection scripts
             await ctx.addInitScript(() => {
                 // Override webdriver flag
@@ -107,7 +77,7 @@ class ZendriverEngine {
             };
         }
         finally {
-            await ctx.close();
+            await browserPool_1.BrowserPool.getInstance().releaseContext(ctx);
         }
     }
 }

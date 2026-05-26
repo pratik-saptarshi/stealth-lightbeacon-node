@@ -29,6 +29,14 @@ export class AeoEvaluator implements Evaluator {
       }
     }
 
+    const microdataTypes = $('[itemtype]').toArray().map(el => $(el).attr('itemtype') || '');
+    const hasMicrodataFaqOrHowTo = microdataTypes.some(type =>
+      type.includes('FAQPage') || type.includes('QAPage') || type.includes('HowTo')
+    );
+    if (hasMicrodataFaqOrHowTo) {
+      hasFaqOrHowTo = true;
+    }
+
     if (!hasFaqOrHowTo) {
       issues.push({
         id: 'R-AEO-SCHEMA',

@@ -32,7 +32,9 @@
     "quality:check": "npm run quality:typecheck && npm run quality:unit && npm run quality:mcp:contract && npm run quality:coverage",
     "test:watch": "node --test --watch tests/*.test.js",
     "start": "npm run build && node dist/cli.js",
-    "mcp": "npm run build && node dist/mcp/stdio.js"
+    "mcp": "npm run build && node dist/mcp/stdio.js",
+    "release": "./tools/release.sh",
+    "release:dry": "./tools/release.sh --dry-run"
   },
   "keywords": [
     "drupal",
@@ -67,6 +69,8 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@release-it/conventional-changelog": "^11.0.0",
+    "release-it": "^20.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },

@@ -1,0 +1,24 @@
+image: node:20
+
+pipelines:
+  custom:
+    stealth-lightbeacon-audit:
+      - step:
+          name: Run Security and AEO/GEO Site Audit
+          caches:
+            - node
+          script:
+            - npm ci
+            - npm run build
+            - npx stealth-lightbeacon audit "https://example.com" --depth 1 --max-urls 5 --format both --output-dir ./audit-results
+          artifacts:
+            - audit-results/**
+  default:
+    - step:
+        name: Build and check signatures
+        caches:
+          - node
+        script:
+          - npm ci
+          - npm run build
+          - npm run quality:check
