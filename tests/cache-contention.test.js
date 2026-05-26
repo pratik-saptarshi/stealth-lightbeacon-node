@@ -8,7 +8,7 @@ async function loadModule(relativePath) {
   const modulePath = path.join(__dirname, '..', 'dist', relativePath);
   return await import(pathToFileURL(modulePath).href);
 }
-
+fs.promises.mkdir();
 test('DuckDbJsonCache throws error on non-contention write error', async () => {
   const mod = await loadModule(path.join('core', 'cache.js'));
   const cachePath = path.join(__dirname, '..', '.tmp', 'test-contention-cache.db');
