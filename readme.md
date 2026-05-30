@@ -7,7 +7,7 @@ TypeScript crawl orchestration and multi-domain site auditing for technical SEO,
 This repository is not ready for public npm publication until the package boundary is explicit. Before publishing, choose one model and document it in `package.json`:
 
 - Source-only GitHub release: mark the package `private` and do not publish to npm.
-- npm-publishable release: add a strict `files` allowlist and `publishConfig`, then verify the tarball with `npm pack --dry-run`.
+- npm-publishable release: add a strict `files` allowlist and `publishConfig`, then verify the tarball with `pnpm pack --dry-run`.
 
 Generated audit outputs, local caches, graph reports, and integration logs are development artifacts. They must stay out of commits and release tarballs.
 
@@ -23,18 +23,18 @@ Generated audit outputs, local caches, graph reports, and integration logs are d
 ## Install
 
 ```sh
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 ```
 
-Use `npm ci` for clean-room installs and CI. Do not replace it with `npm install` in release automation.
+Use `pnpm install --frozen-lockfile` for clean-room installs and CI. Do not replace it with `pnpm install` in release automation.
 
 ## CLI Usage
 
 Write reports to an ignored output directory instead of the repository root:
 
 ```sh
-npm start -- evaluate https://example.com --out .tmp/reports/example --format both --crawl-depth 1 --max-urls 5 --engine http --no-pdf
+pnpm start -- evaluate https://example.com --out .tmp/reports/example --format both --crawl-depth 1 --max-urls 5 --engine http --no-pdf
 ```
 
 The CLI writes `report.json`, `report.html`, and, when PDF output is enabled, `report.pdf` inside the selected output directory.
@@ -78,38 +78,38 @@ Do not commit generated outputs:
 - `graphify-out/`
 - `integration_log.jsonl`
 
-Use `npm pack --dry-run` before any public source or npm release and inspect the file list for accidental artifacts.
+Use `pnpm pack --dry-run` before any public source or npm release and inspect the file list for accidental artifacts.
 
 ## Developer Workflow
 
 ```sh
-npm run build
-npm test
-npm run coverage
-npm run coverage:check
+pnpm run build
+pnpm test
+pnpm run coverage
+pnpm run coverage:check
 ```
 
 ### CI Test Modes
 
 - Baseline CI checks run deterministic JavaScript lanes:
-  - `npm run quality:typecheck`
-  - `npm run quality:unit`
-  - `npm run quality:mcp:contract`
-  - `npm run quality:coverage`
+  - `pnpm run quality:typecheck`
+  - `pnpm run quality:unit`
+  - `pnpm run quality:mcp:contract`
+  - `pnpm run quality:coverage`
 - Ontology persistence tests are local-only and opt-in:
-  - `npm run test:ontology:local`
+  - `pnpm run test:ontology:local`
 - Rust MCP integration tests are isolated in an explicit lane:
-  - `npm run quality:integration:mcp`
+  - `pnpm run quality:integration:mcp`
   - Requires compiled Rust MCP binary (`cargo build`).
 
 Release candidates should additionally run:
 
 ```sh
-npm pack --dry-run
-npm audit signatures
+pnpm pack --dry-run
+pnpm audit
 ```
 
-Coverage thresholds are enforced by `npm run coverage:check`:
+Coverage thresholds are enforced by `pnpm run coverage:check`:
 - line coverage >= `80%`
 - branch coverage >= `65%`
 - function coverage >= `75%`

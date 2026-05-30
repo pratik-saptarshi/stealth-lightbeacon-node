@@ -17,15 +17,15 @@ Primary executable paths:
 ## 2. Prerequisites
 
 - Node.js `>=24.0.0` (repo currently validated on Node `26.0.0`).
-- npm available in PATH.
+- pnpm available in PATH.
 - Network egress allowed for target domains and any external APIs used by enabled checks.
 - Write access to workspace output directories (recommended: `.tmp/reports/...`).
 
 Install/build:
 
 ```bash
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 ```
 
 ## 3. Environment Configuration
@@ -121,10 +121,10 @@ Outputs:
 Run in order:
 
 ```bash
-npm run build
-npm run test
-npm run coverage:check
-npm run audit:signatures
+pnpm run build
+pnpm run test
+pnpm run coverage:check
+pnpm run audit:signatures
 ```
 
 Interpretation guidance:
@@ -149,13 +149,13 @@ Date context: `2026-05-24` (local workspace session)
 Successful:
 
 ```bash
-/usr/local/bin/lean-ctx -c 'npm run build'
-/usr/local/bin/lean-ctx -c 'npm run audit:signatures'
+/usr/local/bin/lean-ctx -c 'pnpm run build'
+/usr/local/bin/lean-ctx -c 'pnpm run audit:signatures'
 ```
 
 Observed result:
 - TypeScript build completed.
-- npm signature audit completed (`292` packages with verified registry signatures; `63` with verified attestations).
+- pnpm audit completed (`292` packages with verified registry signatures; `63` with verified attestations).
 
 ### 6.2 Successful external domain CLI runs
 

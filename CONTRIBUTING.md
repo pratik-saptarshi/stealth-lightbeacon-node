@@ -6,7 +6,7 @@ Welcome! We maintain high architectural standards and robust test coverage to en
 
 ### 1. Test-Driven Development (TDD)
 We enforce a strict TDD loop for all evaluator modifications and core changes:
-1. **Red Phase**: Write a failing unit test in the `tests/` directory verifying the defect or new capability. Confirm it fails via `npm test`.
+1. **Red Phase**: Write a failing unit test in the `tests/` directory verifying the defect or new capability. Confirm it fails via `pnpm test`.
 2. **Green Phase**: Implement the minimum correct logic inside `src/` to satisfy the test.
 3. **Refactor**: Clean up implementation without breaking existing tests.
 
@@ -18,7 +18,7 @@ All changes must satisfy our continuous integration coverage thresholds. Locally
 
 To run coverage checks locally:
 ```bash
-npm run coverage
+pnpm run coverage
 ```
 Any pull request falling below these thresholds will fail the `quality:coverage` build gate.
 
@@ -26,6 +26,6 @@ Any pull request falling below these thresholds will fail the `quality:coverage`
 - Enable `strict` checks in `tsconfig.json`.
 - Compile changes with zero TypeScript errors:
 ```bash
-npm run build
+pnpm run build
 ```
 - Avoid implicit any types.

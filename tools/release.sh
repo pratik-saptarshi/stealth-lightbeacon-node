@@ -5,7 +5,7 @@ set -euo pipefail
 
 # 1. Run Quality Checks
 echo "=== Running Quality Checks (Typecheck, Unit Tests, MCP contract, Coverage CI) ==="
-npm run quality:check
+pnpm run quality:check
 
 # 2. Perform Release via release-it
 echo "=== Executing release-it ==="
@@ -18,5 +18,5 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
   fi
 fi
 
-npx release-it "$@"
+pnpm exec release-it "$@"
 echo "=== Release Process Completed Successfully ==="

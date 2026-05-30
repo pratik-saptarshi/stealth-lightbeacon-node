@@ -24,14 +24,14 @@ We use `release-it` combined with the `@release-it/conventional-changelog` plugi
 
 ### Execution Scripts
 
-A pre-release script `tools/release.sh` is provided. It guarantees quality by running the full quality check suite (`npm run quality:check`) before executing `release-it`.
+A pre-release script `tools/release.sh` is provided. It guarantees quality by running the full quality check suite (`pnpm run quality:check`) before executing `release-it`.
 
 - **Dry-run Mode (Simulate release):**
-  `npm run release:dry`
+  `pnpm run release:dry`
   *(Prints the version bump, changelog additions, and git commands without applying them)*
 
 - **Production Release:**
-  `npm run release`
+  `pnpm run release`
   *(Bumps version, commits `package.json`, updates `CHANGELOG.md`, tags, pushes to origin, and publishes a GitHub Release)*
 
 ## 3. Configuration

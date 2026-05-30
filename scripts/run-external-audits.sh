@@ -53,7 +53,7 @@ echo "Settings: depth=$CRAWL_DEPTH max_urls=$MAX_URLS engine=$ENGINE skip_pdf=$S
 
 if [[ "$BUILD_FIRST" == "1" ]]; then
   echo "== Build =="
-  npm run build
+  pnpm run build
 fi
 
 mkdir -p "$OUT_BASE"
