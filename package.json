@@ -11,10 +11,10 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
-    "prepack": "npm run build",
-    "pack:dry": "npm pack --dry-run",
-    "audit:signatures": "npm audit signatures",
-    "pretest": "npm run build",
+    "prepack": "pnpm run build",
+    "pack:dry": "pnpm pack --dry-run",
+    "audit:signatures": "pnpm audit",
+    "pretest": "pnpm run build",
     "test": "node --test tests/*.test.js",
     "test:unit": "node --test tests/*.test.js",
     "test:unit:ci": "node --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')",
@@ -24,17 +24,18 @@
     "coverage": "node --experimental-test-coverage --test tests/*.test.js",
     "coverage:ci": "node --experimental-test-coverage --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')",
     "coverage:check": "node tools/check-coverage.js",
-    "quality:typecheck": "npm run typecheck",
-    "quality:unit": "npm run test:unit:ci",
-    "quality:mcp:contract": "npm run test:mcp:contract",
-    "quality:coverage": "COVERAGE_MODE=ci npm run coverage:check",
-    "quality:integration:mcp": "npm run test:mcp:integration",
-    "quality:check": "npm run quality:typecheck && npm run quality:unit && npm run quality:mcp:contract && npm run quality:coverage",
+    "quality:typecheck": "pnpm run typecheck",
+    "quality:unit": "pnpm run test:unit:ci",
+    "quality:mcp:contract": "pnpm run test:mcp:contract",
+    "quality:coverage": "COVERAGE_MODE=ci pnpm run coverage:check",
+    "quality:integration:mcp": "pnpm run test:mcp:integration",
+    "quality:check": "pnpm run quality:typecheck && pnpm run quality:unit && pnpm run quality:mcp:contract && pnpm run quality:coverage",
     "test:watch": "node --test --watch tests/*.test.js",
-    "start": "npm run build && node dist/cli.js",
-    "mcp": "npm run build && node dist/mcp/stdio.js",
+    "start": "pnpm run build && node dist/cli.js",
+    "mcp": "pnpm run build && node dist/mcp/stdio.js",
     "release": "./tools/release.sh",
-    "release:dry": "./tools/release.sh --dry-run"
+    "release:dry": "./tools/release.sh --dry-run",
+    "preinstall": "node -e \"if(!process.env.npm_execpath||!process.env.npm_execpath.includes('pnpm')){console.error('Use pnpm only: run \\\"pnpm install\\\"');process.exit(1)}\""
   },
   "keywords": [
     "drupal",
@@ -76,5 +77,6 @@
   },
   "engines": {
     "node": ">=24.0.0"
-  }
+  },
+  "packageManager": "pnpm@11.4.0"
 }

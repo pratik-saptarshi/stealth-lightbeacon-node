@@ -149,12 +149,96 @@ This implementation plan details the product roadmap designed to close features 
 - **User Story 4.2.1.1**: As a contributor, I want the build pipeline to reject commits that fail coverage limits or trigger lint errors.
   - **Tasks**:
     - [ ] Configure [tools/check-coverage.js](file:///Users/neo/projects/stealth-lightbeacon-node/tools/check-coverage.js) to enforce `line >= 80%`, `branch >= 65%`, and `function >= 75%`.
-    - [ ] Configure `npm run coverage:check` as a pre-commit block.
+    - [ ] Configure `pnpm run coverage:check` as a pre-commit block.
     - [ ] Link these checks to Github, GitLab, and Bitbucket runner configs.
   - **BEADS Tracking**:
     - **`B`**: Lack of automated CI coverage boundaries allows code quality to drop over time.
     - **`E`**: Coverage scripts exist in `package.json` but are not integrated as blocking gates in CI pipelines.
     - **`S`**: Commits dropping test coverage are automatically blocked by the pipeline runner.
+
+---
+
+## 🗺️ Test-Driven Development (TDD) Multiphase Implementation Roadmap
+
+This roadmap structures the closing of gaps and security vulnerabilities into distinct phases. At each milestone, corresponding test cases must be written/updated and executed to guarantee that overall test coverage remains **above 80%** (specifically targeting `line >= 80%`, `branch >= 65%`, and `function >= 75%`).
+
+### Phase 1: Security & SSRF Governance Hardening (P0 Blocker Milestone)
+*Goal: Resolve all critical network boundary and validation vulnerabilities.*
+
+#### 🎯 Milestones & BEADS Tracking
+- **`B`**: SSRFGuard IP rewriting causes HTTPS TLS handshake mismatch; Playwright Zendriver route interception is bypassable via DNS rebinding; Obscura fast engine executes external binary following internal redirects.
+- **`E`**: 
+  - `src/core/fetcher.ts:37-43` alters URL hosts to IPs.
+  - `src/core/scraping/zendriver.ts:41-48` intercepts requests via page routing without Chromium socket pinning.
+  - `src/core/scraping/obscura.ts:35-42` executes binary on input URLs with unchecked subprocess redirect handling.
+- **`S`**: 
+  - Outbound HTTPS fetches succeed without AltName or certificate warnings.
+  - Playwright zendriver audits block target domains that dynamically change resolution to internal addresses.
+  - Obscura subprocess redirect requests to private/loopback addresses are validated and blocked at the Node layer.
+
+#### 🧪 Test Cases & Coverage Gate
+- **TDD Test Updates**:
+  - Update `tests/ssrf.test.js` to mock target HTTPS endpoints and verify they load successfully under `SSRFGuardAgent`.
+  - Add specific tests in `tests/ssrf-dns-rebinding.test.js` simulating DNS rebinding attacks against `ZendriverEngine` and verifying they are blocked.
+  - Add test in `tests/ssrf.test.js` ensuring redirect attempts from `ObscuraEngine` to local subnets trigger `SSRFViolationError`.
+- **Gating Metric**: Run `pnpm run test:unit:ci` and verify all security and fetcher test cases pass. Global code coverage of `src/core/ssrf.ts` and `src/core/fetcher.ts` must exceed **80%**.
+
+---
+
+### Phase 2: Process Lifecycle & Queue Concurrency (P1 Priority Milestone)
+*Goal: Prevent resource leakage and crawler queue popping race conditions.*
+
+#### 🎯 Milestones & BEADS Tracking
+- **`B`**: DuckDB queue retrieval pops duplicate URLs under multi-worker concurrency; `BrowserPool` singleton doesn't release spawned Chromium instances, hanging CLI processes.
+- **`E`**:
+  - `src/core/crawler.ts:125-172` implements read-then-update queues.
+  - `src/cli.ts:206-212` missing `BrowserPool.close()` hook in teardown block.
+- **`S`**:
+  - Multi-worker concurrent crawling crawls 100 pages with exactly 1 fetch per URL.
+  - Executed CLI audits exit immediately with code 0.
+
+#### 🧪 Test Cases & Coverage Gate
+- **TDD Test Updates**:
+  - Add highly concurrent test in `tests/crawler.test.js` spawning 10 parallel workers on a 50-item pending crawl queue, asserting that each item is fetched exactly once.
+  - Add test in `tests/browser-pool.test.js` asserting that calling `BrowserPool.getInstance().close()` successfully terminates child Chromium processes.
+- **Gating Metric**: Run `pnpm run test:unit:ci`. Coverage of `src/core/crawler.ts` and `src/core/scraping/browserPool.ts` must exceed **80%**.
+
+---
+
+### Phase 3: Dynamic Registries & Resilient Caching (P2 Milestone)
+*Goal: Provide structured lifecycles for plugins and prevent Analytical Cache lock contentions.*
+
+#### 🎯 Milestones & BEADS Tracking
+- **`B`**: Orchestrator hardcodes static lists of standard evaluators; no unified client wrapper exists for agent MCP stdio sessions; analytical PageSpeed cache writes fail under simultaneous transaction lock contention.
+- **`E`**:
+  - `src/core/orchestrator.ts` imports static lists.
+  - `src/core/cache.ts` lacks retry-on-contention wrappers.
+- **`S`**:
+  - Developers can register/list custom evaluators dynamically.
+  - Stdio MCP client wrapper cleanly initiates and tears down sessions.
+  - PageSpeed writes handle high write-concurrency stress without transaction aborts.
+
+#### 🧪 Test Cases & Coverage Gate
+- **TDD Test Updates**:
+  - Write test in `tests/evaluator-registry.test.js` registering a mock evaluator and ensuring it executes dynamically within the orchestrator lifecycle.
+  - Add test in `tests/mcp-client.test.js` asserting correct process lifecycles and handshake timeouts.
+  - Write concurrent write test in `tests/cache-contention.test.js` simulating 20 simultaneous analytical cache inserts and asserting zero database transaction errors.
+- **Gating Metric**: Run `pnpm run test:unit:ci`. Coverage of `src/core/evaluatorRegistry.ts` and `src/core/pagespeedCache.ts` must exceed **80%**.
+
+---
+
+### Phase 4: CI Parity & Quality Gates
+*Goal: Prevent any future quality and test regressions.*
+
+#### 🎯 Milestones & BEADS Tracking
+- **`B`**: Quality check scripts are unblocked in CI pipelines.
+- **`E`**: Coverage scripts in `package.json` are not wired up to block local or remote runners.
+- **`S`**: CI pipeline automatically rejects any commits dropping global workspace test coverage below 80%.
+
+#### 🧪 Test Cases & Coverage Gate
+- **TDD Test Updates**:
+  - Verify that `tools/check-coverage.js` executes and correctly evaluates Jest/V8 coverage files.
+- **Gating Metric**: Execute `pnpm run quality:check`. Global codebase coverage must exceed **80%**.
 
 ---
 

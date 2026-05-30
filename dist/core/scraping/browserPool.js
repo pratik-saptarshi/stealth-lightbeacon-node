@@ -34,7 +34,7 @@ class BrowserPool {
         }
         catch {
             throw new Error("Playwright is not installed. Zendriver engine requires the 'playwright-core' pkg.\n" +
-                "To install it, run: npm install playwright-core");
+                "To install it, run: pnpm add playwright-core");
         }
         // Start secure proxy first
         this.proxy = new secureProxy_1.SecureProxy(this.guard);

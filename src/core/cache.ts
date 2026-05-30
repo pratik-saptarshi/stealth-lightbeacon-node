@@ -1,4 +1,6 @@
 import { z, type ZodType } from 'zod';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createDuckDbRuntime } from './db/duckdb';
 import type { DuckDbRuntimeInput, DuckDbQueryInput } from './db/schemas';
 
@@ -84,6 +86,7 @@ export class DuckDbJsonCache<T> {
 
   private async runtime(): Promise<Awaited<ReturnType<typeof createDuckDbRuntime>>> {
     if (!this.runtimePromise) {
+      mkdirSync(dirname(this.databasePath), { recursive: true });
       this.runtimePromise = createDuckDbRuntime({
         databasePath: this.databasePath,
         ...this.options

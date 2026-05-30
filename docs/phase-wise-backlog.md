@@ -4,9 +4,9 @@
 Prepare this repository for a strict public GitHub release with reproducible installs, no accidental secret leakage, no generated-artifact publishing, and no legacy install-scripted dependencies in the default path.
 
 ## Retained controls
-- Keep `package-lock.json` checked in and keep `npm ci` as the only CI install path.
+- Keep `pnpm-lock.yaml` checked in and keep `pnpm install --frozen-lockfile` as the only CI install path.
 - Keep `node_modules/` ignored and never commit it.
-- Treat `npm pack --dry-run` as a release gate before any public package or source release.
+- Treat `pnpm pack --dry-run` as a release gate before any public package or source release.
 - Preserve registry-only dependency resolution and the existing SRI integrity hashes in the lockfile.
 
 ## Phase 0: Decide the release boundary
@@ -14,12 +14,12 @@ Prepare this repository for a strict public GitHub release with reproducible ins
   - Source-only GitHub release: mark the package `private` and do not publish to npm.
   - npm-publishable release: add an explicit `files` allowlist and `publishConfig`, and keep only the intended runtime artifacts in the tarball.
 - If npm publication is enabled, include only the intended release files and exclude generated or internal artifacts such as `graphify-out/`, `integration_log.jsonl`, `report.*`, `.devcontainer/`, CI metadata, and local cache folders.
-- Add `npm pack --dry-run` to CI or release checks so the published tarball is reviewed before release.
+- Add `pnpm pack --dry-run` to CI or release checks so the published tarball is reviewed before release.
 - Decide whether `dist/` is the only shipped runtime artifact or whether source files are also part of the package boundary; document that choice and keep it stable.
 - Until that decision is made, public docs must describe the package as not npm-publishable and must not imply that the current package metadata is a safe publication boundary.
 
 ## Phase 1: Dependency provenance and install hardening
-- Keep all normal installs on `npm ci`; do not add any new `npm install` path to CI or release automation.
+- Keep all normal installs on `pnpm install --frozen-lockfile`; do not add any new `pnpm install` path to CI or release automation.
 - Add a provenance or signature-verification step on top of the existing lockfile hashes so the release process verifies dependency integrity beyond SRI alone.
 - Add a failure condition for non-registry dependency sources such as `git+` or `file:` URLs.
 - Pin GitHub Actions used by release-critical workflows to immutable SHAs when the release pipeline is finalized.
@@ -48,10 +48,10 @@ Prepare this repository for a strict public GitHub release with reproducible ins
 
 ## Phase 5: Public-release verification
 - Add a release checklist covering:
-  - `npm ci`
+  - `pnpm install --frozen-lockfile`
   - build
   - test
-  - `npm pack --dry-run`
+  - `pnpm pack --dry-run`
   - dependency audit
   - provenance/signature check
   - secret scan
@@ -73,8 +73,8 @@ Prepare this repository for a strict public GitHub release with reproducible ins
 
 | ID | Severity | Summary | Category | Action Taken |
 |----|----------|---------|----------|--------------|
-| R1-F01 | HIGH | Package publish surface is uncontrolled and can include generated/internal artifacts | Must-fix | Added Phase 0 release-boundary decision, `files` allowlist, `prepack` build hook, and `npm pack --dry-run` gate |
-| R1-F02 | HIGH | Devcontainer installs Playwright outside the lockfile | Must-fix | Switched the runtime and devcontainer path to lockfile-bound `playwright-core` plus `npm ci`; removed the out-of-lockfile bootstrap path |
+| R1-F01 | HIGH | Package publish surface is uncontrolled and can include generated/internal artifacts | Must-fix | Added Phase 0 release-boundary decision, `files` allowlist, `prepack` build hook, and `pnpm pack --dry-run` gate |
+| R1-F02 | HIGH | Devcontainer installs Playwright outside the lockfile | Must-fix | Switched the runtime and devcontainer path to lockfile-bound `playwright-core` plus `pnpm install --frozen-lockfile`; removed the out-of-lockfile bootstrap path |
 | R1-F03 | MEDIUM | `html-pdf` / `phantomjs-prebuilt` bring a deprecated install-scripted dependency chain | Must-fix | Replaced the default PDF path with `playwright-core` + Chromium, removing the legacy install-scripted dependency chain |
 | R1-F04 | MEDIUM | CLI API key handling and default report output leak secrets or generated reports by default | Must-fix | Added Phase 4 secret- and artifact-leakage controls; README warns against CLI secrets and default output now lands in `reports/` |
 | R1-F05 | MEDIUM | Lockfile hashes exist, but signature/provenance verification is absent | Bundle | Added Phase 1 provenance/signature verification gate and CI audit-signatures step |
@@ -84,9 +84,9 @@ Prepare this repository for a strict public GitHub release with reproducible ins
 
 ## Action Items
 - [P0] Decide whether the release is source-only GitHub or npm-publishable, then lock the package boundary accordingly.
-- [x] Devcontainer now uses lockfile-bound `playwright-core` and `npm ci`; no out-of-lockfile Playwright install remains.
+- [x] Devcontainer now uses lockfile-bound `playwright-core` and `pnpm install --frozen-lockfile`; no out-of-lockfile Playwright install remains.
 - [x] The legacy `html-pdf` / `phantomjs-prebuilt` path has been replaced with `playwright-core` + Chromium.
 - [x] Default report output now lands in `reports/`, with generated artifacts ignored by default.
-- [x] Added provenance/signature verification to the release pipeline via `npm audit signatures`.
-- [x] Add `npm pack --dry-run` to CI or release checks and block release if generated artifacts appear in the tarball.
+- [x] Added provenance/signature verification to the release pipeline via `pnpm audit`.
+- [x] Add `pnpm pack --dry-run` to CI or release checks and block release if generated artifacts appear in the tarball.
 - [x] README, `.env.example`, and `SECURITY.md` already reflect the public-release posture; keep them aligned with future release changes.
