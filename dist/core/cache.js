@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JsonFileCache = exports.DuckDbJsonCache = void 0;
 const zod_1 = require("zod");
+const node_fs_1 = require("node:fs");
+const node_path_1 = require("node:path");
 const duckdb_1 = require("./db/duckdb");
 class DuckDbJsonCache {
     databasePath;
@@ -65,6 +67,7 @@ class DuckDbJsonCache {
     }
     async runtime() {
         if (!this.runtimePromise) {
+            (0, node_fs_1.mkdirSync)((0, node_path_1.dirname)(this.databasePath), { recursive: true });
             this.runtimePromise = (0, duckdb_1.createDuckDbRuntime)({
                 databasePath: this.databasePath,
                 ...this.options
