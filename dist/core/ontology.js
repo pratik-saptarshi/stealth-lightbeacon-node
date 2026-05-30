@@ -1,10 +1,44 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createOntologyStore = createOntologyStore;
 exports.resolveOntologyPaths = resolveOntologyPaths;
 const node_crypto_1 = require("node:crypto");
 const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
+const cheerio = __importStar(require("cheerio"));
 const zod_1 = require("zod");
 const duckdb_1 = require("./db/duckdb");
 const lancedb_1 = require("./db/lancedb");
@@ -371,16 +405,14 @@ function hashId(...parts) {
     return (0, node_crypto_1.createHash)('sha256').update(parts.join('|')).digest('hex').slice(0, 24);
 }
 function extractTitle(html) {
-    const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    return match?.[1]?.replace(/\s+/g, ' ').trim() || undefined;
+    const $ = cheerio.load(html);
+    const title = $('title').first().text().replace(/\s+/g, ' ').trim();
+    return title || undefined;
 }
 function summarizeHtml(html, title) {
-    const bodyText = html
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const $ = cheerio.load(html);
+    $('script, style').remove();
+    const bodyText = $.root().text().replace(/\s+/g, ' ').trim();
     const text = title ? `${title}. ${bodyText}` : bodyText;
     return text.slice(0, 512);
 }

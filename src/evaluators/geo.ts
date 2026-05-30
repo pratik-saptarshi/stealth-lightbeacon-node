@@ -2,6 +2,19 @@ import * as cheerio from 'cheerio';
 import type { AuditIssue, DomainResult, EvaluationContext, Evaluator } from '../core/types';
 import { scoreFromIssues } from '../core/types';
 
+function isAuthorityCitationHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host.endsWith('.edu') ||
+    host.endsWith('.gov') ||
+    host.endsWith('.org') ||
+    host === 'wikipedia.org' ||
+    host.endsWith('.wikipedia.org') ||
+    host === 'arxiv.org' ||
+    host.endsWith('.arxiv.org')
+  );
+}
+
 export class GeoEvaluator implements Evaluator {
   readonly id = 'geo';
   readonly domain = 'Generative Engine Optimization';
@@ -71,14 +84,7 @@ export class GeoEvaluator implements Evaluator {
         const href = $(element).attr('href')!.toLowerCase();
         try {
           const url = new URL(href, context.url);
-          const domain = url.hostname;
-          return (
-            domain.endsWith('.edu') ||
-            domain.endsWith('.gov') ||
-            domain.endsWith('.org') ||
-            domain.includes('wikipedia.org') ||
-            domain.includes('arxiv.org')
-          );
+          return isAuthorityCitationHost(url.hostname);
         } catch {
           return false;
         }

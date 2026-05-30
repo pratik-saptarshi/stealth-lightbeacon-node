@@ -36,6 +36,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GeoEvaluator = void 0;
 const cheerio = __importStar(require("cheerio"));
 const types_1 = require("../core/types");
+function isAuthorityCitationHost(hostname) {
+    const host = hostname.toLowerCase();
+    return (host.endsWith('.edu') ||
+        host.endsWith('.gov') ||
+        host.endsWith('.org') ||
+        host === 'wikipedia.org' ||
+        host.endsWith('.wikipedia.org') ||
+        host === 'arxiv.org' ||
+        host.endsWith('.arxiv.org'));
+}
 class GeoEvaluator {
     id = 'geo';
     domain = 'Generative Engine Optimization';
@@ -101,12 +111,7 @@ class GeoEvaluator {
                 const href = $(element).attr('href').toLowerCase();
                 try {
                     const url = new URL(href, context.url);
-                    const domain = url.hostname;
-                    return (domain.endsWith('.edu') ||
-                        domain.endsWith('.gov') ||
-                        domain.endsWith('.org') ||
-                        domain.includes('wikipedia.org') ||
-                        domain.includes('arxiv.org'));
+                    return isAuthorityCitationHost(url.hostname);
                 }
                 catch {
                     return false;

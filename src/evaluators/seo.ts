@@ -3,6 +3,19 @@ import type { AuditIssue, DomainResult, EvaluationContext, Evaluator } from '../
 import { scoreFromIssues } from '../core/types';
 import { RobotsPolicy } from '../core/robots';
 
+function hasSchemaOrgContext(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.hostname === 'schema.org' || parsed.hostname.endsWith('.schema.org');
+  } catch {
+    return false;
+  }
+}
+
 export class SeoEvaluator implements Evaluator {
   readonly id = 'seo';
   readonly domain = 'Technical SEO';
@@ -134,7 +147,7 @@ export class SeoEvaluator implements Evaluator {
           const parsed = JSON.parse(content);
           const contextValue = parsed['@context'] ?? parsed?.[0]?.['@context'];
           const typeValue = parsed['@type'] ?? parsed?.[0]?.['@type'];
-          if (!String(contextValue ?? '').includes('schema.org')) {
+          if (!hasSchemaOrgContext(contextValue)) {
             issues.push(makeIssue(`R-SEO-LD-CTX-${index}`, 'warning', 'JSON-LD block has missing or invalid @context.', 'JSON-LD', 'Use https://schema.org.'));
           }
           if (!typeValue) {

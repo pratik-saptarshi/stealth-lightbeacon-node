@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import * as cheerio from 'cheerio';
 import { z } from 'zod';
 import { createDuckDbRuntime, type DuckDbRuntime } from './db/duckdb';
 import { createLanceDbRuntime, type LanceDbRuntime } from './db/lancedb';
@@ -482,17 +483,15 @@ function hashId(...parts: string[]): string {
 }
 
 function extractTitle(html: string): string | undefined {
-  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return match?.[1]?.replace(/\s+/g, ' ').trim() || undefined;
+  const $ = cheerio.load(html);
+  const title = $('title').first().text().replace(/\s+/g, ' ').trim();
+  return title || undefined;
 }
 
 function summarizeHtml(html: string, title?: string): string {
-  const bodyText = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const $ = cheerio.load(html);
+  $('script, style').remove();
+  const bodyText = $.root().text().replace(/\s+/g, ' ').trim();
   const text = title ? `${title}. ${bodyText}` : bodyText;
   return text.slice(0, 512);
 }
