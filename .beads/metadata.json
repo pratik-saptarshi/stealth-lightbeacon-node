@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "stealth_lightbeacon_node",
+  "project_id": "e73795b6-c3ce-476a-af92-a21f55f35dec"
+}
