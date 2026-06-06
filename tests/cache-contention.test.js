@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { z } = require('zod');
@@ -24,6 +25,24 @@ test('DuckDbJsonCache throws error on non-contention write error', async () => {
   );
   
   await cache.close();
+});
+
+test('DuckDbJsonCache creates nested database directories before opening cache', async () => {
+  const mod = await loadModule(path.join('core', 'cache.js'));
+  const cacheDir = path.join(__dirname, '..', '.tmp', 'cache-contention', 'nested');
+  const cachePath = path.join(cacheDir, 'test-contention-cache.db');
+  const schema = z.object({ value: z.string() });
+
+  await fs.rm(cacheDir, { recursive: true, force: true });
+
+  const cache = new mod.DuckDbJsonCache(cachePath, schema);
+  try {
+    await cache.set('https://example.com/nested', { value: 'created' });
+    const stored = await cache.get('https://example.com/nested', 60_000);
+    assert.deepEqual(stored, { value: 'created' });
+  } finally {
+    await cache.close();
+  }
 });
 
 test('DuckDbJsonCache retry fails after 5 contention attempts and throws error', async () => {
