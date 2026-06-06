@@ -220,6 +220,8 @@ exports.pageSpeedSummarySchema = zod_1.z
     lcpMs: zod_1.z.number().nonnegative().optional(),
     clsScore: zod_1.z.number().nonnegative().optional(),
     inpMs: zod_1.z.number().nonnegative().optional(),
-    ttfbMs: zod_1.z.number().nonnegative().optional()
+    ttfbMs: zod_1.z.number().nonnegative().optional(),
+    fetchedAt: zod_1.z.string().datetime({ offset: true }).optional(),
+    parseErrors: zod_1.z.array(zod_1.z.string().min(1)).optional()
 })
     .strict();

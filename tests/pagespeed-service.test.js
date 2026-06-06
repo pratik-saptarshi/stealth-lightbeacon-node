@@ -101,6 +101,98 @@ test('PageSpeedService fetches and caches on miss', async () => {
   }
 });
 
+test('PageSpeedService parses localized metric strings and timezone-aware fetchTime deterministically', async () => {
+  const mod = await loadModule(path.join('core', 'pagespeed.js'));
+  const cache = {
+    async get() {
+      return null;
+    },
+    async set() {},
+    async close() {}
+  };
+  const service = new mod.PageSpeedService({ cache });
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        lighthouseResult: {
+          fetchTime: '2026-06-06T09:15:30-05:00',
+          categories: { performance: { score: 0.88 } },
+          audits: {
+            'largest-contentful-paint': { displayValue: '1,8 s' },
+            'interaction-to-next-paint': { displayValue: '180 ms' },
+            'cumulative-layout-shift': { displayValue: '0,03' },
+            'server-response-time': { displayValue: '220 ms' }
+          }
+        }
+      };
+    }
+  });
+  try {
+    const result = await service.getSummary('https://example.com/', 'k');
+    assert.equal(result.lcpMs, 1800);
+    assert.equal(result.inpMs, 180);
+    assert.equal(result.clsScore, 0.03);
+    assert.equal(result.ttfbMs, 220);
+    assert.equal(result.fetchedAt, '2026-06-06T14:15:30.000Z');
+    assert.deepEqual(result.parseErrors, undefined);
+  } finally {
+    global.fetch = originalFetch;
+    await service.close();
+  }
+});
+
+test('PageSpeedService degrades explicitly when localized metric or date payloads cannot be parsed', async () => {
+  const mod = await loadModule(path.join('core', 'pagespeed.js'));
+  const cache = {
+    async get() {
+      return null;
+    },
+    async set() {},
+    async close() {}
+  };
+  const service = new mod.PageSpeedService({ cache });
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    async json() {
+      return {
+        lighthouseResult: {
+          fetchTime: 'June 6 2026 9:15 AM Central',
+          categories: { performance: { score: 0.75 } },
+          audits: {
+            'largest-contentful-paint': { displayValue: 'not reported' },
+            'interaction-to-next-paint': { displayValue: 'n/a' },
+            'cumulative-layout-shift': { displayValue: 'unavailable' },
+            'server-response-time': { displayValue: 'unknown' }
+          }
+        }
+      };
+    }
+  });
+  try {
+    const result = await service.getSummary('https://example.com/', 'k');
+    assert.equal(result.lcpMs, undefined);
+    assert.equal(result.inpMs, undefined);
+    assert.equal(result.clsScore, undefined);
+    assert.equal(result.ttfbMs, undefined);
+    assert.equal(result.fetchedAt, undefined);
+    assert.deepEqual(result.parseErrors, [
+      'lcpMs:unparseable',
+      'inpMs:unparseable',
+      'clsScore:unparseable',
+      'ttfbMs:unparseable',
+      'fetchedAt:unparseable'
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+    await service.close();
+  }
+});
+
 test('PageSpeedService retries cache writes on contention-like errors', async () => {
   const mod = await loadModule(path.join('core', 'pagespeed.js'));
   let attempts = 0;
