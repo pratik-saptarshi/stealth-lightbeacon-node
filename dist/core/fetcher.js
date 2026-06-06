@@ -156,7 +156,7 @@ async function fetchHttpPage(url, guard, userAgent, maxRedirects = 5) {
 async function renderPage(url, guard, userAgent) {
     let playwrightModule;
     try {
-        playwrightModule = await new Function('return import("playwright-core")')();
+        playwrightModule = await Promise.resolve().then(() => __importStar(require('playwright-core')));
     }
     catch {
         throw new Error("Rendered audits require the 'playwright-core' package to be installed.");
