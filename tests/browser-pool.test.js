@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -11,6 +12,19 @@ async function loadModule(relativePath) {
     assert.fail(`Failed to load ${relativePath}: ${error.message}`);
   }
 }
+
+test('BrowserPool disables service workers for rendered audit isolation', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'core', 'scraping', 'browserPool.ts'),
+    'utf8'
+  );
+
+  assert.match(
+    source,
+    /--disable-service-workers/,
+    'Chromium launch args must disable service workers so page-controlled background fetches cannot bypass route/proxy isolation'
+  );
+});
 
 test('BrowserPool returns the same browser instance on multiple calls', async () => {
   const mod = await loadModule(path.join('core', 'scraping', 'browserPool.js'));

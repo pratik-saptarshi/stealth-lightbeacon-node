@@ -51,6 +51,7 @@ export class BrowserPool {
         '--disable-blink-features=AutomationControlled',
         '--disable-infobars',
         '--window-size=1920,1080',
+        '--disable-service-workers',
         '--disable-setuid-sandbox',
         '--single-process',
         `--proxy-server=http://127.0.0.1:${proxyPort}`
