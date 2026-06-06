@@ -172,7 +172,7 @@ function pdfOptions(outputPath: string): Record<string, unknown> {
 
 async function importOptional<T>(packageName: string): Promise<T | null> {
   try {
-    return await new Function('packageName', 'return import(packageName)')(packageName) as T;
+    return await import(packageName) as T;
   } catch {
     return null;
   }
@@ -276,4 +276,3 @@ function escapeXml(unsafe: string): string {
     }
   });
 }
-
