@@ -84,9 +84,13 @@ function requestSecurePinned(urlStr, options) {
                     headers,
                     text: async () => bodyText
                 });
+                agents.httpAgent.destroy();
+                agents.httpsAgent.destroy();
             });
         });
         req.on('error', (err) => {
+            agents.httpAgent.destroy();
+            agents.httpsAgent.destroy();
             reject(err);
         });
         req.end();

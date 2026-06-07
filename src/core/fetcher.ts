@@ -68,10 +68,14 @@ export function requestSecurePinned(
           headers,
           text: async () => bodyText
         });
+        agents.httpAgent.destroy();
+        agents.httpsAgent.destroy();
       });
     });
 
     req.on('error', (err) => {
+      agents.httpAgent.destroy();
+      agents.httpsAgent.destroy();
       reject(err);
     });
 

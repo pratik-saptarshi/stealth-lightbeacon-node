@@ -6,6 +6,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 exports.evaluateCommand = evaluateCommand;
+exports.reconCommand = reconCommand;
+exports.applyReconRecommendation = applyReconRecommendation;
 exports.checkBrokenLinks = checkBrokenLinks;
 const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
@@ -21,6 +23,7 @@ const budget_1 = require("./core/budget");
 const ssrf_1 = require("./core/ssrf");
 const ontology_1 = require("./core/ontology");
 const browserPool_1 = require("./core/scraping/browserPool");
+const recon_1 = require("./core/recon");
 const DEFAULT_OUTPUT_DIR = 'reports';
 async function main() {
     const cleanup = async () => {
@@ -48,6 +51,7 @@ async function main() {
         .option('-n, --max-urls <count>', 'Maximum crawled URLs', '10')
         .option('--render', 'Render JS via Playwright', false)
         .option('--engine <engine>', 'Fetch engine: http, rendered, fast, or stealth', 'http')
+        .option('--recon-auto', 'Run pre-audit recon and apply the recommended engine/throttle', false)
         .option('--http2', 'Reserved flag for HTTP/2 transport support', false)
         .option('--budget <path>', 'Budget configuration path')
         .option('--check-links', 'Check discovered outbound links', false)
@@ -59,6 +63,14 @@ async function main() {
         .option('--no-pdf', 'Skip PDF output')
         .action(async (url, options) => {
         await evaluateCommand(url, options);
+    });
+    program
+        .command('recon')
+        .argument('<url>', 'Target URL')
+        .option('--allow-private', 'Allow private or loopback targets', false)
+        .action(async (url, options) => {
+        await reconCommand(url, options);
+        process.exit(0);
     });
     program
         .argument('[url]', 'Compatibility mode target URL')
@@ -104,6 +116,7 @@ async function evaluateCommand(rawUrl, rawOptions) {
         http2: rawOptions.http2,
         persist: rawOptions.persist,
         apiKey: rawOptions.apiKey,
+        throttleMs: rawOptions.throttleMs,
         pdf: rawOptions.pdf
     });
     if (options.http2) {
@@ -130,6 +143,12 @@ async function evaluateCommand(rawUrl, rawOptions) {
         });
         const evaluators = (0, defaultEvaluators_1.createDefaultEvaluators)();
         const guard = new ssrf_1.SSRFGuard({ allowPrivate: options.allowPrivate });
+        const reconRecommendation = rawOptions.reconAuto
+            ? await new recon_1.PreAuditRecon(guard).analyze(url)
+            : undefined;
+        const auditOptions = reconRecommendation
+            ? applyReconRecommendation(options, reconRecommendation)
+            : options;
         let robotsContent = undefined;
         try {
             const robotsUrl = new URL('/robots.txt', url).toString();
@@ -143,7 +162,7 @@ async function evaluateCommand(rawUrl, rawOptions) {
         }
         const report = await (0, orchestrator_1.runAudit)({
             targetUrl: url,
-            options,
+            options: auditOptions,
             fetchPage,
             evaluators,
             persistence: ontologyStore,
@@ -170,6 +189,17 @@ async function evaluateCommand(rawUrl, rawOptions) {
                 };
             }
         });
+        if (reconRecommendation) {
+            report.domains.push({
+                id: 'recon',
+                domain: 'recon',
+                score: 10,
+                issues: [],
+                metadata: {
+                    recommendation: reconRecommendation
+                }
+            });
+        }
         if (options.checkLinks) {
             const outboundFindings = await checkBrokenLinks(report.targetUrl, fetchPage);
             const seoDomain = report.domains.find((domain) => domain.id === 'seo');
@@ -229,6 +259,23 @@ async function evaluateCommand(rawUrl, rawOptions) {
         await ontologyStore?.close();
         await browserPool_1.BrowserPool.getInstance().close();
     }
+}
+async function reconCommand(rawUrl, rawOptions) {
+    const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    const guard = new ssrf_1.SSRFGuard({ allowPrivate: Boolean(rawOptions.allowPrivate) });
+    const fetchFn = typeof rawOptions.fetchFn === 'function'
+        ? rawOptions.fetchFn
+        : undefined;
+    const result = await new recon_1.PreAuditRecon(guard, fetchFn).analyze(url);
+    console.log(JSON.stringify(result));
+}
+function applyReconRecommendation(options, recommendation) {
+    return {
+        ...options,
+        engine: recommendation.recommendedEngine,
+        throttleMs: recommendation.recommendedThrottleMs,
+        reconRecommendation: recommendation
+    };
 }
 async function checkBrokenLinks(startUrl, fetchPage) {
     const page = await fetchPage(startUrl);
