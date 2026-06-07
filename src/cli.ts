@@ -16,7 +16,7 @@ import { BrowserPool } from './core/scraping/browserPool';
 
 const DEFAULT_OUTPUT_DIR = 'reports';
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const cleanup = async () => {
     try {
       await BrowserPool.getInstance().close();
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   await program.parseAsync(process.argv);
 }
 
-async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknown>): Promise<void> {
+export async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknown>): Promise<void> {
   const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
   const options = loadRuntimeOptions({
     outputDir: rawOptions.out,
@@ -230,7 +230,7 @@ async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknow
   }
 }
 
-async function checkBrokenLinks(
+export async function checkBrokenLinks(
   startUrl: string,
   fetchPage: (url: string) => Promise<{ url: string; html: string; headers: Record<string, string | string[] | undefined>; status: number; responseTimeMs: number }>
 ): Promise<string[]> {
@@ -252,4 +252,6 @@ async function checkBrokenLinks(
   return broken;
 }
 
-void main();
+if (require.main === module) {
+  void main();
+}
