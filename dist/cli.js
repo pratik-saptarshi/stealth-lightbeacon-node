@@ -4,6 +4,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.main = main;
+exports.evaluateCommand = evaluateCommand;
+exports.checkBrokenLinks = checkBrokenLinks;
 const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
 const commander_1 = require("commander");
@@ -235,4 +238,6 @@ async function checkBrokenLinks(startUrl, fetchPage) {
     }
     return broken;
 }
-void main();
+if (require.main === module) {
+    void main();
+}
