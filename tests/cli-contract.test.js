@@ -27,3 +27,26 @@ test('requiring compiled cli has no stdout stderr or exit side effects', () => {
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, '');
 });
+
+test('evaluateCommand fails fast when http2 is requested before audit side effects', async () => {
+  const cli = require('../dist/cli.js');
+  const originalError = console.error;
+  const originalExitCode = process.exitCode;
+  const errors = [];
+  process.exitCode = undefined;
+  console.error = (message) => errors.push(String(message));
+
+  try {
+    await cli.evaluateCommand('example.com', {
+      http2: true,
+      out: 'reports',
+      format: 'json'
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(process.exitCode, 1);
+  assert.match(errors.join('\n'), /HTTP\/2 transport is not supported/i);
+  process.exitCode = originalExitCode;
+});

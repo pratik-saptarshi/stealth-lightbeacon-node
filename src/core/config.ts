@@ -15,6 +15,7 @@ const runtimeOptionsSchema = z.object({
   checkApi: z.coerce.boolean().default(false),
   allowPrivate: z.coerce.boolean().default(false),
   http2: z.coerce.boolean().default(false),
+  persist: z.coerce.boolean().default(true),
   pdf: z.coerce.boolean().default(true),
   apiKey: z.string().optional(),
   concurrency: z.coerce.number().int().min(1).max(20).default(4),
@@ -36,6 +37,7 @@ export interface RuntimeOptions {
   checkApi: boolean;
   allowPrivate: boolean;
   http2: boolean;
+  persist: boolean;
   pdf: boolean;
   apiKey?: string;
   concurrency: number;
@@ -57,6 +59,7 @@ export function loadRuntimeOptions(input: Record<string, unknown>): RuntimeOptio
     checkApi: parsed.checkApi,
     allowPrivate: parsed.allowPrivate,
     http2: parsed.http2,
+    persist: parsed.persist,
     pdf: parsed.pdf,
     apiKey: parsed.apiKey,
     concurrency: parsed.concurrency,
