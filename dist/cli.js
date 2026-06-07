@@ -54,6 +54,8 @@ async function main() {
         .option('--check-api', 'Probe Drupal JSON:API user endpoint', false)
         .option('--allow-private', 'Allow private or loopback targets', false)
         .option('--api-key <key>', 'Google PageSpeed Insights API key')
+        .option('--persist', 'Persist audit and ontology state', true)
+        .option('--no-persist', 'Skip audit and ontology persistence')
         .option('--no-pdf', 'Skip PDF output')
         .action(async (url, options) => {
         await evaluateCommand(url, options);
@@ -79,6 +81,7 @@ async function main() {
             checkApi: false,
             allowPrivate: false,
             http2: false,
+            persist: true,
             apiKey: options.apiKey,
             pdf: options.pdf
         });
@@ -99,14 +102,20 @@ async function evaluateCommand(rawUrl, rawOptions) {
         checkApi: rawOptions.checkApi,
         allowPrivate: rawOptions.allowPrivate,
         http2: rawOptions.http2,
+        persist: rawOptions.persist,
         apiKey: rawOptions.apiKey,
         pdf: rawOptions.pdf
     });
+    if (options.http2) {
+        console.error('HTTP/2 transport is not supported yet; rerun without --http2.');
+        process.exitCode = 1;
+        return;
+    }
     const spinner = (0, ora_1.default)(`Auditing ${url}`).start();
     let ontologyStore;
     let pageSpeedService;
     try {
-        ontologyStore = process.env.STEALTH_LIGHTBEACON_ONTOLOGY === '0'
+        ontologyStore = !options.persist || process.env.STEALTH_LIGHTBEACON_ONTOLOGY === '0'
             ? undefined
             : await (0, ontology_1.createOntologyStore)({
                 rootDir: process.env.STEALTH_LIGHTBEACON_DATA_DIR ?? (0, node_path_1.join)(process.cwd(), '.data')
