@@ -161,7 +161,7 @@ export async function fetchHttpPage(
 async function renderPage(url: string, guard: SSRFGuard, userAgent: string): Promise<CrawledPage> {
   let playwrightModule: { chromium: { launch: (options: Record<string, unknown>) => Promise<any> } };
   try {
-    playwrightModule = await new Function('return import("playwright-core")')();
+    playwrightModule = await import('playwright-core');
   } catch {
     throw new Error("Rendered audits require the 'playwright-core' package to be installed.");
   }
@@ -255,4 +255,3 @@ export async function secureFetch(
     json: async () => JSON.parse(await res.text())
   };
 }
-

@@ -67,6 +67,14 @@ class PageSpeedService {
         const clsPercentile = extractPercentile(metrics, 'CUMULATIVE_LAYOUT_SHIFT_SCORE');
         const inpPercentile = extractPercentile(metrics, 'INTERACTION_TO_NEXT_PAINT');
         const ttfbPercentile = extractPercentile(metrics, 'EXPERIMENTAL_TIME_TO_FIRST_BYTE');
+        const parseErrors = [];
+        const lcpMs = lcpPercentile ?? extractAuditMetricMs(audits, 'largest-contentful-paint', 'lcpMs', parseErrors);
+        const inpMs = inpPercentile ?? extractAuditMetricMs(audits, 'interaction-to-next-paint', 'inpMs', parseErrors);
+        const clsScore = clsPercentile !== undefined
+            ? clsPercentile / 100
+            : extractAuditMetricNumber(audits, 'cumulative-layout-shift', 'clsScore', parseErrors);
+        const ttfbMs = ttfbPercentile ?? extractAuditMetricMs(audits, 'server-response-time', 'ttfbMs', parseErrors);
+        const fetchedAt = extractFetchTime(lighthouseResult, parseErrors);
         const summary = schemas_1.pageSpeedSummarySchema.parse({
             lighthousePerformanceScore: extractPerformanceScore(lighthouseResult),
             cwv: {
@@ -74,10 +82,12 @@ class PageSpeedService {
                 inp: extractDisplayValue(audits, 'interaction-to-next-paint'),
                 cls: extractDisplayValue(audits, 'cumulative-layout-shift')
             },
-            lcpMs: lcpPercentile,
-            clsScore: clsPercentile !== undefined ? clsPercentile / 100 : undefined,
-            inpMs: inpPercentile,
-            ttfbMs: ttfbPercentile
+            lcpMs,
+            clsScore,
+            inpMs,
+            ttfbMs,
+            fetchedAt,
+            parseErrors: parseErrors.length > 0 ? parseErrors : undefined
         });
         await this.writeCacheWithRetry(cache, url, summary);
         return summary;
@@ -130,6 +140,79 @@ function extractDisplayValue(audits, auditName) {
     const audit = audits[auditName];
     const displayValue = audit?.displayValue;
     return typeof displayValue === 'string' ? displayValue : undefined;
+}
+function extractAuditMetricMs(audits, auditName, fieldName, parseErrors) {
+    const value = extractAuditNumericValue(audits, auditName);
+    if (value !== undefined) {
+        return value;
+    }
+    const displayValue = extractDisplayValue(audits, auditName);
+    if (displayValue === undefined) {
+        return undefined;
+    }
+    const parsed = parseLocalizedNumber(displayValue);
+    if (parsed === undefined) {
+        parseErrors.push(`${fieldName}:unparseable`);
+        return undefined;
+    }
+    return /\bs\b/i.test(displayValue) && !/\bms\b/i.test(displayValue) ? parsed * 1000 : parsed;
+}
+function extractAuditMetricNumber(audits, auditName, fieldName, parseErrors) {
+    const value = extractAuditNumericValue(audits, auditName);
+    if (value !== undefined) {
+        return value;
+    }
+    const displayValue = extractDisplayValue(audits, auditName);
+    if (displayValue === undefined) {
+        return undefined;
+    }
+    const parsed = parseLocalizedNumber(displayValue);
+    if (parsed === undefined) {
+        parseErrors.push(`${fieldName}:unparseable`);
+    }
+    return parsed;
+}
+function extractAuditNumericValue(audits, auditName) {
+    const audit = audits[auditName];
+    const numericValue = audit?.numericValue;
+    return typeof numericValue === 'number' && Number.isFinite(numericValue) ? numericValue : undefined;
+}
+function parseLocalizedNumber(value) {
+    const match = value.match(/[-+]?\d[\d.,\s]*/);
+    if (!match) {
+        return undefined;
+    }
+    const normalized = normalizeLocalizedNumber(match[0]);
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+function normalizeLocalizedNumber(value) {
+    const compact = value.replace(/\s/g, '');
+    const lastComma = compact.lastIndexOf(',');
+    const lastDot = compact.lastIndexOf('.');
+    if (lastComma > lastDot) {
+        return compact.replace(/\./g, '').replace(',', '.');
+    }
+    if (lastDot > lastComma) {
+        return compact.replace(/,/g, '');
+    }
+    return compact.replace(',', '.');
+}
+function extractFetchTime(lighthouseResult, parseErrors) {
+    const fetchTime = lighthouseResult?.fetchTime;
+    if (typeof fetchTime !== 'string') {
+        return undefined;
+    }
+    if (!/[zZ]|[+-]\d{2}:\d{2}$/.test(fetchTime)) {
+        parseErrors.push('fetchedAt:unparseable');
+        return undefined;
+    }
+    const time = Date.parse(fetchTime);
+    if (!Number.isFinite(time)) {
+        parseErrors.push('fetchedAt:unparseable');
+        return undefined;
+    }
+    return new Date(time).toISOString();
 }
 function extractPercentile(metrics, metricName) {
     const metric = metrics?.[metricName];

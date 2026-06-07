@@ -279,7 +279,9 @@ export const pageSpeedSummarySchema = z
     lcpMs: z.number().nonnegative().optional(),
     clsScore: z.number().nonnegative().optional(),
     inpMs: z.number().nonnegative().optional(),
-    ttfbMs: z.number().nonnegative().optional()
+    ttfbMs: z.number().nonnegative().optional(),
+    fetchedAt: z.string().datetime({ offset: true }).optional(),
+    parseErrors: z.array(z.string().min(1)).optional()
   })
   .strict();
 
