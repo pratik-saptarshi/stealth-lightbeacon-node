@@ -64,12 +64,28 @@ class BrowserPool {
             });
         }
         this.activeContexts++;
-        const browser = await this.getBrowser();
-        return await browser.newContext(options);
+        try {
+            const browser = await this.getBrowser();
+            return await browser.newContext({
+                ...options,
+                serviceWorkers: 'block'
+            });
+        }
+        catch (error) {
+            this.releaseSlot();
+            throw error;
+        }
     }
     async releaseContext(context) {
-        await context.close();
-        this.activeContexts--;
+        try {
+            await context.close();
+        }
+        finally {
+            this.releaseSlot();
+        }
+    }
+    releaseSlot() {
+        this.activeContexts = Math.max(0, this.activeContexts - 1);
         const next = this.contextQueue.shift();
         if (next) {
             next();

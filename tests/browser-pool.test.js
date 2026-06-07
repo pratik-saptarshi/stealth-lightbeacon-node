@@ -66,3 +66,59 @@ test('BrowserPool caps maximum concurrent browser contexts and queues requests',
   }
   await pool.close();
 });
+
+test('BrowserPool blocks service workers on every acquired browser context', async () => {
+  const mod = await loadModule(path.join('core', 'scraping', 'browserPool.js'));
+  const pool = mod.BrowserPool.getInstance();
+  const capturedOptions = [];
+
+  pool.getBrowser = async () => ({
+    newContext: async (options) => {
+      capturedOptions.push(options);
+      return { close: async () => {} };
+    }
+  });
+
+  const context = await pool.acquireContext({ userAgent: 'test-agent' });
+
+  assert.equal(capturedOptions.length, 1);
+  assert.equal(capturedOptions[0].serviceWorkers, 'block');
+  assert.equal(capturedOptions[0].userAgent, 'test-agent');
+
+  await pool.releaseContext(context);
+  await pool.close();
+});
+
+test('BrowserPool releases queued context slots when context close fails', async () => {
+  const mod = await loadModule(path.join('core', 'scraping', 'browserPool.js'));
+  const pool = mod.BrowserPool.getInstance();
+  let contextId = 0;
+
+  pool.getBrowser = async () => ({
+    newContext: async () => {
+      contextId += 1;
+      return {
+        id: contextId,
+        close: async () => {
+          if (contextId === 1) {
+            throw new Error('close failed');
+          }
+        }
+      };
+    }
+  });
+
+  const first = await pool.acquireContext();
+  const closeError = await pool.releaseContext(first).then(
+    () => null,
+    (error) => error
+  );
+  assert.match(closeError.message, /close failed/);
+  assert.equal(pool.activeContexts, 0, 'Failed close must still release the active slot');
+
+  const second = await pool.acquireContext();
+  assert.equal(second.id, 2, 'Failed close must not leak a context slot');
+
+  await pool.releaseContext(second);
+  await pool.close();
+});

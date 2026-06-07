@@ -3,6 +3,10 @@ import * as net from 'node:net';
 import { isIP } from 'node:net';
 import { SSRFGuard } from '../ssrf';
 
+function formatUrlHost(host: string): string {
+  return isIP(host) === 6 ? `[${host}]` : host;
+}
+
 export class SecureProxy {
   private server: http.Server;
   private port = 0;
@@ -21,6 +25,7 @@ export class SecureProxy {
         const parsed = new URL(urlStr);
         this.guard.validate(urlStr).then(async () => {
           const pinnedIp = this.guard.getPinnedAddress(parsed.hostname) || parsed.hostname;
+          await this.guard.validate(`${parsed.protocol}//${formatUrlHost(pinnedIp)}${parsed.port ? `:${parsed.port}` : ''}/`);
           const connector = http.request({
             hostname: pinnedIp,
             port: parsed.port ? Number(parsed.port) : 80,
@@ -59,8 +64,9 @@ export class SecureProxy {
       const port = Number(parts[1]);
 
       const dummyUrl = `https://${host}:${port}`;
-      this.guard.validate(dummyUrl).then(() => {
+      this.guard.validate(dummyUrl).then(async () => {
         const pinnedIp = this.guard.getPinnedAddress(host) || host;
+        await this.guard.validate(`https://${formatUrlHost(pinnedIp)}:${port}/`);
         const serverSocket = net.connect(port, pinnedIp, () => {
           clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
           if (head && head.length > 0) {

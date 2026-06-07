@@ -37,6 +37,9 @@ exports.SecureProxy = void 0;
 const http = __importStar(require("node:http"));
 const net = __importStar(require("node:net"));
 const node_net_1 = require("node:net");
+function formatUrlHost(host) {
+    return (0, node_net_1.isIP)(host) === 6 ? `[${host}]` : host;
+}
 class SecureProxy {
     server;
     port = 0;
@@ -54,6 +57,7 @@ class SecureProxy {
                 const parsed = new URL(urlStr);
                 this.guard.validate(urlStr).then(async () => {
                     const pinnedIp = this.guard.getPinnedAddress(parsed.hostname) || parsed.hostname;
+                    await this.guard.validate(`${parsed.protocol}//${formatUrlHost(pinnedIp)}${parsed.port ? `:${parsed.port}` : ''}/`);
                     const connector = http.request({
                         hostname: pinnedIp,
                         port: parsed.port ? Number(parsed.port) : 80,
@@ -91,8 +95,9 @@ class SecureProxy {
             const host = parts[0];
             const port = Number(parts[1]);
             const dummyUrl = `https://${host}:${port}`;
-            this.guard.validate(dummyUrl).then(() => {
+            this.guard.validate(dummyUrl).then(async () => {
                 const pinnedIp = this.guard.getPinnedAddress(host) || host;
+                await this.guard.validate(`https://${formatUrlHost(pinnedIp)}:${port}/`);
                 const serverSocket = net.connect(port, pinnedIp, () => {
                     clientSocket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
                     if (head && head.length > 0) {
