@@ -1,7 +1,9 @@
 import * as http from 'node:http';
 import { listDefaultEvaluatorPlugins } from '../core/defaultEvaluators';
+import { ArtifactStore } from './artifacts';
 import { loadServiceConfig, type ServiceConfigInput } from './config';
 import { EvaluationJobStore } from './jobs';
+import { defaultReconRunner } from './reconRunner';
 
 export interface StartedService {
   address: {
@@ -19,7 +21,10 @@ const ENDPOINTS = [
   '/capabilities',
   '/evaluations',
   '/evaluations/{id}',
-  '/evaluations/{id}/result'
+  '/evaluations/{id}/result',
+  '/evaluations/{id}/artifacts',
+  '/evaluations/{id}/artifacts/{name}',
+  '/recon'
 ] as const;
 
 export async function startService(input: ServiceConfigInput = {}): Promise<StartedService> {
@@ -29,6 +34,8 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
     auditRunner: config.auditRunner,
     clock: config.clock
   });
+  const artifacts = new ArtifactStore(config.artifactRoot);
+  const reconRunner = config.reconRunner ?? defaultReconRunner;
   const server = http.createServer(async (request, response) => {
     const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
 
@@ -72,6 +79,67 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
         ok: true,
         id: job.id,
         status: job.status
+      });
+      return;
+    }
+
+    const evaluationArtifactsMatch = path.match(/^\/evaluations\/([^/]+)\/artifacts$/);
+    if (request.method === 'GET' && evaluationArtifactsMatch) {
+      const id = evaluationArtifactsMatch[1];
+      const job = jobs.get(id);
+      if (!job) {
+        writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
+        return;
+      }
+      if (job.status !== 'succeeded') {
+        writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
+        return;
+      }
+      writeJson(response, 200, {
+        ok: true,
+        id,
+        artifacts: artifacts.list(id)
+      });
+      return;
+    }
+
+    const evaluationArtifactMatch = path.match(/^\/evaluations\/([^/]+)\/artifacts\/(.+)$/);
+    if (request.method === 'GET' && evaluationArtifactMatch) {
+      const id = evaluationArtifactMatch[1];
+      const job = jobs.get(id);
+      if (!job) {
+        writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
+        return;
+      }
+      const artifact = artifacts.open(id, decodeURIComponent(evaluationArtifactMatch[2]));
+      if (artifact === 'invalid') {
+        writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
+        return;
+      }
+      if (!artifact) {
+        writeJson(response, 404, errorEnvelope('artifact_not_found', 'Artifact not found'));
+        return;
+      }
+      response.writeHead(200, {
+        'content-type': `${artifact.contentType}; charset=utf-8`
+      });
+      artifact.stream.pipe(response);
+      return;
+    }
+
+    if (request.method === 'POST' && path === '/recon') {
+      const body = await readJsonBody(request);
+      if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
+        writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
+        return;
+      }
+      const recon = await reconRunner({
+        targetUrl: body.targetUrl.trim(),
+        allowPrivate: body.allowPrivate === true
+      });
+      writeJson(response, 200, {
+        ok: true,
+        recon
       });
       return;
     }

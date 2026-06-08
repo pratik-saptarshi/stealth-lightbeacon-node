@@ -1,4 +1,5 @@
 import type { AuditRunner } from './auditRunner';
+import type { ReconRunner } from './reconRunner';
 
 export interface ServiceConfig {
   host: string;
@@ -7,6 +8,8 @@ export interface ServiceConfig {
   version: string;
   clock: () => number;
   auditRunner?: AuditRunner;
+  reconRunner?: ReconRunner;
+  artifactRoot: string;
 }
 
 export interface ServiceConfigInput {
@@ -16,6 +19,8 @@ export interface ServiceConfigInput {
   version?: unknown;
   clock?: () => number;
   auditRunner?: AuditRunner;
+  reconRunner?: ReconRunner;
+  artifactRoot?: unknown;
 }
 
 export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig {
@@ -25,7 +30,9 @@ export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig
     persistence: input.persistence !== false,
     version: parseVersion(input.version),
     clock: input.clock ?? (() => Date.now()),
-    auditRunner: input.auditRunner
+    auditRunner: input.auditRunner,
+    reconRunner: input.reconRunner,
+    artifactRoot: parseArtifactRoot(input.artifactRoot)
   };
 }
 
@@ -43,4 +50,10 @@ function parsePort(port: unknown): number {
 
 function parseVersion(version: unknown): string {
   return typeof version === 'string' && version.trim() ? version.trim() : '3.0.11';
+}
+
+function parseArtifactRoot(artifactRoot: unknown): string {
+  return typeof artifactRoot === 'string' && artifactRoot.trim()
+    ? artifactRoot.trim()
+    : 'reports/service-artifacts';
 }

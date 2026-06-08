@@ -45,6 +45,7 @@ class EvaluationJobStore {
         this.update(job, { status: 'running' });
         try {
             const result = await this.auditRunner({
+                id: job.id,
                 targetUrl: job.targetUrl,
                 options: job.options
             });

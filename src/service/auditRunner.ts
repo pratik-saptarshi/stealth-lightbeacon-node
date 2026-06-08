@@ -1,4 +1,5 @@
 export interface EvaluationRequest {
+  id: string;
   targetUrl: string;
   options: Record<string, unknown>;
 }
