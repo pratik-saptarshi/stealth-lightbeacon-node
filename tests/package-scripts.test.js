@@ -149,3 +149,9 @@ test('public npm package does not block npm global install with preinstall', () 
 
   assert.equal(scripts.preinstall, undefined);
 });
+
+test('ts-node source tests have direct node type definitions', () => {
+  const packageJson = readPackageJson();
+
+  assert.match(packageJson.devDependencies?.['@types/node'] ?? '', /^\^?\d+\.\d+\.\d+/);
+});
