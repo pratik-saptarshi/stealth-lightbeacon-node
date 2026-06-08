@@ -34,7 +34,7 @@
     "start": "pnpm run build && node dist/cli.js",
     "mcp": "pnpm run build && node dist/mcp/stdio.js",
     "release": "./tools/release.sh",
-    "release:dry": "./tools/release.sh --dry-run"
+    "release:dry": "./tools/release.sh --dry-run --ci"
   },
   "keywords": [
     "drupal",

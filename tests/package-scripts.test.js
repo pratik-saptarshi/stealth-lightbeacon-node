@@ -32,6 +32,7 @@ test('non-interactive quality gates invoke tools directly without nested pnpm ru
   assert.equal(scripts.typecheck, 'tsc -p tsconfig.json --noEmit --incremental false');
   assert.equal(scripts['coverage:check'], 'node tools/check-coverage.js');
   assert.equal(scripts['quality:coverage'], 'COVERAGE_MODE=ci node tools/check-coverage.js');
+  assert.equal(scripts['release:dry'], './tools/release.sh --dry-run --ci');
   assert.equal(
     scripts['quality:check'],
     "tsc -p tsconfig.json --noEmit --incremental false && node --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js') && node --test tests/mcp.test.js && COVERAGE_MODE=ci node tools/check-coverage.js"
