@@ -5,7 +5,7 @@ import { Command } from 'commander';
 import ora from 'ora';
 import { createDefaultEvaluators } from './core/defaultEvaluators';
 import { createFetchPage, discoverBrokenLinks, fetchHttpPage, secureFetch } from './core/fetcher';
-import { loadRuntimeOptions } from './core/config';
+import { loadRuntimeOptions, type RuntimeOptions } from './core/config';
 import { runAudit } from './core/orchestrator';
 import { Reporter } from './core/reporter';
 import { PageSpeedService } from './core/pagespeed';
@@ -13,6 +13,7 @@ import { validateBudgets } from './core/budget';
 import { SSRFGuard } from './core/ssrf';
 import { createOntologyStore } from './core/ontology';
 import { BrowserPool } from './core/scraping/browserPool';
+import { PreAuditRecon, type ReconRecommendation } from './core/recon';
 
 const DEFAULT_OUTPUT_DIR = 'reports';
 
@@ -44,6 +45,7 @@ export async function main(): Promise<void> {
     .option('-n, --max-urls <count>', 'Maximum crawled URLs', '10')
     .option('--render', 'Render JS via Playwright', false)
     .option('--engine <engine>', 'Fetch engine: http, rendered, fast, or stealth', 'http')
+    .option('--recon-auto', 'Run pre-audit recon and apply the recommended engine/throttle', false)
     .option('--http2', 'Reserved flag for HTTP/2 transport support', false)
     .option('--budget <path>', 'Budget configuration path')
     .option('--check-links', 'Check discovered outbound links', false)
@@ -55,6 +57,15 @@ export async function main(): Promise<void> {
     .option('--no-pdf', 'Skip PDF output')
     .action(async (url: string, options: Record<string, unknown>) => {
       await evaluateCommand(url, options);
+    });
+
+  program
+    .command('recon')
+    .argument('<url>', 'Target URL')
+    .option('--allow-private', 'Allow private or loopback targets', false)
+    .action(async (url: string, options: Record<string, unknown>) => {
+      await reconCommand(url, options);
+      process.exit(0);
     });
 
   program
@@ -104,6 +115,7 @@ export async function evaluateCommand(rawUrl: string, rawOptions: Record<string,
     http2: rawOptions.http2,
     persist: rawOptions.persist,
     apiKey: rawOptions.apiKey,
+    throttleMs: rawOptions.throttleMs,
     pdf: rawOptions.pdf
   });
 
@@ -134,6 +146,12 @@ export async function evaluateCommand(rawUrl: string, rawOptions: Record<string,
     });
     const evaluators = createDefaultEvaluators();
     const guard = new SSRFGuard({ allowPrivate: options.allowPrivate });
+    const reconRecommendation = rawOptions.reconAuto
+      ? await new PreAuditRecon(guard).analyze(url)
+      : undefined;
+    const auditOptions = reconRecommendation
+      ? applyReconRecommendation(options, reconRecommendation)
+      : options;
 
     let robotsContent: string | undefined = undefined;
     try {
@@ -148,7 +166,7 @@ export async function evaluateCommand(rawUrl: string, rawOptions: Record<string,
 
     const report = await runAudit({
       targetUrl: url,
-      options,
+      options: auditOptions,
       fetchPage,
       evaluators,
       persistence: ontologyStore,
@@ -175,6 +193,18 @@ export async function evaluateCommand(rawUrl: string, rawOptions: Record<string,
         };
       }
     });
+
+    if (reconRecommendation) {
+      report.domains.push({
+        id: 'recon',
+        domain: 'recon',
+        score: 10,
+        issues: [],
+        metadata: {
+          recommendation: reconRecommendation
+        }
+      });
+    }
 
     if (options.checkLinks) {
       const outboundFindings = await checkBrokenLinks(report.targetUrl, fetchPage);
@@ -238,6 +268,28 @@ export async function evaluateCommand(rawUrl: string, rawOptions: Record<string,
     await ontologyStore?.close();
     await BrowserPool.getInstance().close();
   }
+}
+
+export async function reconCommand(rawUrl: string, rawOptions: Record<string, unknown>): Promise<void> {
+  const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+  const guard = new SSRFGuard({ allowPrivate: Boolean(rawOptions.allowPrivate) });
+  const fetchFn = typeof rawOptions.fetchFn === 'function'
+    ? rawOptions.fetchFn as typeof secureFetch
+    : undefined;
+  const result = await new PreAuditRecon(guard, fetchFn).analyze(url);
+  console.log(JSON.stringify(result));
+}
+
+export function applyReconRecommendation(
+  options: RuntimeOptions,
+  recommendation: ReconRecommendation
+): RuntimeOptions & { reconRecommendation: ReconRecommendation } {
+  return {
+    ...options,
+    engine: recommendation.recommendedEngine,
+    throttleMs: recommendation.recommendedThrottleMs,
+    reconRecommendation: recommendation
+  };
 }
 
 export async function checkBrokenLinks(
