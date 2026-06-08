@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
+exports.searchSemanticCommand = searchSemanticCommand;
 exports.evaluateCommand = evaluateCommand;
 exports.reconCommand = reconCommand;
 exports.applyReconRecommendation = applyReconRecommendation;
@@ -25,6 +26,7 @@ const ontology_1 = require("./core/ontology");
 const browserPool_1 = require("./core/scraping/browserPool");
 const recon_1 = require("./core/recon");
 const DEFAULT_OUTPUT_DIR = 'reports';
+const DEFAULT_SEARCH_LIMIT = 10;
 async function main() {
     const cleanup = async () => {
         try {
@@ -65,6 +67,16 @@ async function main() {
         await evaluateCommand(url, options);
     });
     program
+        .command('search-semantic')
+        .argument('<query>', 'Semantic query for persisted audit and ontology data')
+        .option('--data-dir <dir>', 'Persistence data directory')
+        .option('--format <format>', 'Output format: json or llm', 'json')
+        .option('--limit <count>', 'Maximum result count', String(DEFAULT_SEARCH_LIMIT))
+        .action(async (query, options) => {
+        await searchSemanticCommand(query, options);
+        process.exit(0);
+    });
+    program
         .command('recon')
         .argument('<url>', 'Target URL')
         .option('--allow-private', 'Allow private or loopback targets', false)
@@ -76,8 +88,20 @@ async function main() {
         .argument('[url]', 'Compatibility mode target URL')
         .option('-o, --output <dir>', 'Output directory', DEFAULT_OUTPUT_DIR)
         .option('-k, --api-key <key>', 'Google PageSpeed Insights API key')
+        .option('--search-semantic <query>', 'Semantic query for persisted audit and ontology data')
+        .option('--search-format <format>', 'Semantic search output format: json or llm', 'json')
+        .option('--search-limit <count>', 'Maximum semantic search result count', String(DEFAULT_SEARCH_LIMIT))
+        .option('--data-dir <dir>', 'Persistence data directory')
         .option('--no-pdf', 'Skip PDF generation')
         .action(async (url, options) => {
+        if (typeof options.searchSemantic === 'string') {
+            await searchSemanticCommand(options.searchSemantic, {
+                dataDir: options.dataDir,
+                format: options.searchFormat,
+                limit: options.searchLimit
+            });
+            return;
+        }
         if (!url) {
             program.outputHelp();
             return;
@@ -99,6 +123,58 @@ async function main() {
         });
     });
     await program.parseAsync(process.argv);
+}
+async function searchSemanticCommand(rawQuery, rawOptions = {}) {
+    const query = rawQuery.trim();
+    if (!query) {
+        console.error('Semantic search query is required.');
+        process.exitCode = 1;
+        return;
+    }
+    const limit = parseSearchLimit(rawOptions.limit);
+    const format = parseSearchFormat(rawOptions.format);
+    const createStore = rawOptions.createStore ?? ontology_1.createOntologyStore;
+    const rootDir = typeof rawOptions.dataDir === 'string' && rawOptions.dataDir.trim()
+        ? rawOptions.dataDir
+        : process.env.STEALTH_LIGHTBEACON_DATA_DIR ?? (0, node_path_1.join)(process.cwd(), '.data');
+    const store = await createStore({ rootDir });
+    try {
+        const hits = await store.search(query, limit);
+        if (format === 'llm') {
+            console.log(formatSearchResultsForLlm(query, limit, hits));
+            return;
+        }
+        console.log(JSON.stringify({ query, limit, hits }));
+    }
+    finally {
+        await store.close();
+    }
+}
+function parseSearchLimit(rawLimit) {
+    const limit = Number(rawLimit ?? DEFAULT_SEARCH_LIMIT);
+    if (!Number.isInteger(limit) || limit < 1) {
+        return DEFAULT_SEARCH_LIMIT;
+    }
+    return limit;
+}
+function parseSearchFormat(rawFormat) {
+    return rawFormat === 'llm' ? 'llm' : 'json';
+}
+function formatSearchResultsForLlm(query, limit, hits) {
+    const lines = [
+        `query: ${query}`,
+        `limit: ${limit}`,
+        `hits: ${hits.length}`
+    ];
+    for (const hit of hits) {
+        const score = typeof hit.score === 'number' ? hit.score.toFixed(4) : 'n/a';
+        lines.push(`- ${hit.kind} ${hit.label} score=${score} id=${hit.id}`);
+        if (hit.url) {
+            lines.push(`  url: ${hit.url}`);
+        }
+        lines.push(`  text: ${hit.text}`);
+    }
+    return lines.join('\n');
 }
 async function evaluateCommand(rawUrl, rawOptions) {
     const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;

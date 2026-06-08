@@ -10,9 +10,121 @@ test('compiled cli module exports handlers without running the command', () => {
 
   assert.equal(typeof cli.main, 'function');
   assert.equal(typeof cli.evaluateCommand, 'function');
+  assert.equal(typeof cli.searchSemanticCommand, 'function');
   assert.equal(typeof cli.reconCommand, 'function');
   assert.equal(typeof cli.applyReconRecommendation, 'function');
   assert.equal(typeof cli.checkBrokenLinks, 'function');
+});
+
+test('searchSemanticCommand emits ranked hit json and closes the store', async () => {
+  const cli = require('../dist/cli.js');
+  const originalLog = console.log;
+  const output = [];
+  let closed = false;
+  console.log = (message) => output.push(String(message));
+
+  try {
+    await cli.searchSemanticCommand('drupal redirect', {
+      limit: '2',
+      format: 'json',
+      createStore: async (options) => {
+        assert.match(options.rootDir, /\.data$/);
+        return {
+          search: async (query, limit) => {
+            assert.equal(query, 'drupal redirect');
+            assert.equal(limit, 2);
+            return [
+              {
+                id: 'finding-1',
+                kind: 'finding',
+                label: 'R-SEO-REDIRECT',
+                text: 'Redirect chain found',
+                url: 'https://example.test/a',
+                runId: 'run-1',
+                score: 0.91
+              }
+            ];
+          },
+          close: async () => {
+            closed = true;
+          }
+        };
+      }
+    });
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.equal(closed, true);
+  assert.equal(output.length, 1);
+  assert.deepEqual(JSON.parse(output[0]), {
+    query: 'drupal redirect',
+    limit: 2,
+    hits: [
+      {
+        id: 'finding-1',
+        kind: 'finding',
+        label: 'R-SEO-REDIRECT',
+        text: 'Redirect chain found',
+        url: 'https://example.test/a',
+        runId: 'run-1',
+        score: 0.91
+      }
+    ]
+  });
+});
+
+test('searchSemanticCommand emits stable empty json for no hits', async () => {
+  const cli = require('../dist/cli.js');
+  const originalLog = console.log;
+  const output = [];
+  console.log = (message) => output.push(String(message));
+
+  try {
+    await cli.searchSemanticCommand('no matching topic', {
+      createStore: async () => ({
+        search: async () => [],
+        close: async () => {}
+      })
+    });
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.deepEqual(JSON.parse(output[0]), {
+    query: 'no matching topic',
+    limit: 10,
+    hits: []
+  });
+});
+
+test('searchSemanticCommand rejects empty queries before opening a store', async () => {
+  const cli = require('../dist/cli.js');
+  const originalError = console.error;
+  const originalExitCode = process.exitCode;
+  const errors = [];
+  let opened = false;
+  process.exitCode = undefined;
+  console.error = (message) => errors.push(String(message));
+
+  try {
+    await cli.searchSemanticCommand('   ', {
+      createStore: async () => {
+        opened = true;
+        return {
+          search: async () => [],
+          close: async () => {}
+        };
+      }
+    });
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(opened, false);
+  assert.equal(process.exitCode, 1);
+  assert.match(errors.join('\n'), /query is required/i);
+  process.exitCode = originalExitCode;
 });
 
 test('requiring compiled cli has no stdout stderr or exit side effects', () => {
@@ -28,6 +140,20 @@ test('requiring compiled cli has no stdout stderr or exit side effects', () => {
   assert.equal(result.status, 0);
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, '');
+});
+
+test('compiled cli help exposes semantic search compatibility flag', () => {
+  const result = spawnSync(
+    process.execPath,
+    ['dist/cli.js', '--help'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    }
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /--search-semantic <query>/);
 });
 
 test('evaluateCommand fails fast when http2 is requested before audit side effects', async () => {

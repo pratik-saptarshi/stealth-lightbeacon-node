@@ -11,11 +11,19 @@ import { Reporter } from './core/reporter';
 import { PageSpeedService } from './core/pagespeed';
 import { validateBudgets } from './core/budget';
 import { SSRFGuard } from './core/ssrf';
-import { createOntologyStore } from './core/ontology';
+import { createOntologyStore, type OntologySearchResult, type OntologyStore, type OntologyStoreOptions } from './core/ontology';
 import { BrowserPool } from './core/scraping/browserPool';
 import { PreAuditRecon, type ReconRecommendation } from './core/recon';
 
 const DEFAULT_OUTPUT_DIR = 'reports';
+const DEFAULT_SEARCH_LIMIT = 10;
+
+interface SearchSemanticOptions {
+  createStore?: (options: OntologyStoreOptions) => Promise<Pick<OntologyStore, 'close' | 'search'>>;
+  dataDir?: unknown;
+  format?: unknown;
+  limit?: unknown;
+}
 
 export async function main(): Promise<void> {
   const cleanup = async () => {
@@ -60,6 +68,17 @@ export async function main(): Promise<void> {
     });
 
   program
+    .command('search-semantic')
+    .argument('<query>', 'Semantic query for persisted audit and ontology data')
+    .option('--data-dir <dir>', 'Persistence data directory')
+    .option('--format <format>', 'Output format: json or llm', 'json')
+    .option('--limit <count>', 'Maximum result count', String(DEFAULT_SEARCH_LIMIT))
+    .action(async (query: string, options: Record<string, unknown>) => {
+      await searchSemanticCommand(query, options);
+      process.exit(0);
+    });
+
+  program
     .command('recon')
     .argument('<url>', 'Target URL')
     .option('--allow-private', 'Allow private or loopback targets', false)
@@ -72,8 +91,21 @@ export async function main(): Promise<void> {
     .argument('[url]', 'Compatibility mode target URL')
     .option('-o, --output <dir>', 'Output directory', DEFAULT_OUTPUT_DIR)
     .option('-k, --api-key <key>', 'Google PageSpeed Insights API key')
+    .option('--search-semantic <query>', 'Semantic query for persisted audit and ontology data')
+    .option('--search-format <format>', 'Semantic search output format: json or llm', 'json')
+    .option('--search-limit <count>', 'Maximum semantic search result count', String(DEFAULT_SEARCH_LIMIT))
+    .option('--data-dir <dir>', 'Persistence data directory')
     .option('--no-pdf', 'Skip PDF generation')
     .action(async (url: string | undefined, options: Record<string, unknown>) => {
+      if (typeof options.searchSemantic === 'string') {
+        await searchSemanticCommand(options.searchSemantic, {
+          dataDir: options.dataDir,
+          format: options.searchFormat,
+          limit: options.searchLimit
+        });
+        return;
+      }
+
       if (!url) {
         program.outputHelp();
         return;
@@ -97,6 +129,69 @@ export async function main(): Promise<void> {
     });
 
   await program.parseAsync(process.argv);
+}
+
+export async function searchSemanticCommand(
+  rawQuery: string,
+  rawOptions: SearchSemanticOptions = {}
+): Promise<void> {
+  const query = rawQuery.trim();
+  if (!query) {
+    console.error('Semantic search query is required.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const limit = parseSearchLimit(rawOptions.limit);
+  const format = parseSearchFormat(rawOptions.format);
+  const createStore = rawOptions.createStore ?? createOntologyStore;
+  const rootDir = typeof rawOptions.dataDir === 'string' && rawOptions.dataDir.trim()
+    ? rawOptions.dataDir
+    : process.env.STEALTH_LIGHTBEACON_DATA_DIR ?? join(process.cwd(), '.data');
+  const store = await createStore({ rootDir });
+
+  try {
+    const hits = await store.search(query, limit);
+    if (format === 'llm') {
+      console.log(formatSearchResultsForLlm(query, limit, hits));
+      return;
+    }
+
+    console.log(JSON.stringify({ query, limit, hits }));
+  } finally {
+    await store.close();
+  }
+}
+
+function parseSearchLimit(rawLimit: unknown): number {
+  const limit = Number(rawLimit ?? DEFAULT_SEARCH_LIMIT);
+  if (!Number.isInteger(limit) || limit < 1) {
+    return DEFAULT_SEARCH_LIMIT;
+  }
+  return limit;
+}
+
+function parseSearchFormat(rawFormat: unknown): 'json' | 'llm' {
+  return rawFormat === 'llm' ? 'llm' : 'json';
+}
+
+function formatSearchResultsForLlm(query: string, limit: number, hits: OntologySearchResult[]): string {
+  const lines = [
+    `query: ${query}`,
+    `limit: ${limit}`,
+    `hits: ${hits.length}`
+  ];
+
+  for (const hit of hits) {
+    const score = typeof hit.score === 'number' ? hit.score.toFixed(4) : 'n/a';
+    lines.push(`- ${hit.kind} ${hit.label} score=${score} id=${hit.id}`);
+    if (hit.url) {
+      lines.push(`  url: ${hit.url}`);
+    }
+    lines.push(`  text: ${hit.text}`);
+  }
+
+  return lines.join('\n');
 }
 
 export async function evaluateCommand(rawUrl: string, rawOptions: Record<string, unknown>): Promise<void> {
