@@ -122,6 +122,13 @@ test('github workflows pin pnpm to package manager version', () => {
   }
 });
 
+test('scheduled audit workflow invokes the built cli artifact directly', () => {
+  const workflow = readAuditWorkflow();
+
+  assert.match(workflow, /node dist\/cli\.js evaluate "\$AUDIT_TARGET_URL"/);
+  assert.doesNotMatch(workflow, /pnpm exec stealth-lightbeacon/);
+});
+
 test('package metadata satisfies public publish gate', () => {
   const packageJson = readPackageJson();
 
