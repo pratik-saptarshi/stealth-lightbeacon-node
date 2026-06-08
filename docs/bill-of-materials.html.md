@@ -229,6 +229,19 @@ Latest checked dry-run output for `stealth-lightbeacon-node@3.0.11` included onl
 
 The dry-run output did not include `src/`, `tests/`, `docs/`, `.github/`, `.beads/`, `desktop/`, `.npmrc`, `.pnpm-store/`, `dist/.tsbuildinfo`, local reports, or cache directories.
 
+### 5.1.2 Release security and SBOM evidence paths
+
+Release evidence should be captured under `.tmp/release-evidence/` and kept out of the npm tarball:
+
+- `.tmp/release-evidence/sbom.cyclonedx.json`
+- `.tmp/release-evidence/secret-scan.txt`
+- `.tmp/release-evidence/audit-prod.txt`
+- `.tmp/release-evidence/pack-dry-run.txt`
+- `.tmp/release-evidence/quality-check.txt`
+- `.tmp/release-evidence/codeql-status.txt`
+
+The release owner must review SBOM requirements, secret-scan results, prod audit output, CodeQL/code-scanning status, Dependabot alerts, and tarball artifact hygiene before tagging or publishing.
+
 ### 5.2 Coverage Gate
 
 `pnpm run quality:check` includes coverage validation through `tools/check-coverage.js`.
