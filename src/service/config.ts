@@ -10,6 +10,11 @@ export interface ServiceConfig {
   auditRunner?: AuditRunner;
   reconRunner?: ReconRunner;
   artifactRoot: string;
+  authToken?: string;
+  tls?: {
+    keyPath: string;
+    certPath: string;
+  };
 }
 
 export interface ServiceConfigInput {
@@ -21,6 +26,9 @@ export interface ServiceConfigInput {
   auditRunner?: AuditRunner;
   reconRunner?: ReconRunner;
   artifactRoot?: unknown;
+  authToken?: unknown;
+  tlsKeyPath?: unknown;
+  tlsCertPath?: unknown;
 }
 
 export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig {
@@ -32,7 +40,9 @@ export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig
     clock: input.clock ?? (() => Date.now()),
     auditRunner: input.auditRunner,
     reconRunner: input.reconRunner,
-    artifactRoot: parseArtifactRoot(input.artifactRoot)
+    artifactRoot: parseArtifactRoot(input.artifactRoot),
+    authToken: parseOptionalString(input.authToken),
+    tls: parseTls(input.tlsKeyPath, input.tlsCertPath)
   };
 }
 
@@ -56,4 +66,20 @@ function parseArtifactRoot(artifactRoot: unknown): string {
   return typeof artifactRoot === 'string' && artifactRoot.trim()
     ? artifactRoot.trim()
     : 'reports/service-artifacts';
+}
+
+function parseOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function parseTls(keyPath: unknown, certPath: unknown): ServiceConfig['tls'] {
+  const key = parseOptionalString(keyPath);
+  const cert = parseOptionalString(certPath);
+  if (!key && !cert) {
+    return undefined;
+  }
+  return {
+    keyPath: key ?? '',
+    certPath: cert ?? ''
+  };
 }
