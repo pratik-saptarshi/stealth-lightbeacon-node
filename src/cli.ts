@@ -15,6 +15,7 @@ import { createOntologyStore, type OntologySearchResult, type OntologyStore, typ
 import { BrowserPool } from './core/scraping/browserPool';
 import { PreAuditRecon, type ReconRecommendation } from './core/recon';
 import { WorkspaceWatcher, type WorkspaceWatcherOptions } from './core/watcher';
+import { startService, type StartedService } from './service/server';
 
 const DEFAULT_OUTPUT_DIR = 'reports';
 const DEFAULT_SEARCH_LIMIT = 10;
@@ -44,9 +45,11 @@ interface WatchController {
 
 export async function main(): Promise<void> {
   let activeWatchController: WatchController | undefined;
+  let activeService: StartedService | undefined;
   const cleanup = async () => {
     try {
       await activeWatchController?.close();
+      await activeService?.close();
       await BrowserPool.getInstance().close();
     } catch {
       // Ignore cleanup error
@@ -91,6 +94,16 @@ export async function main(): Promise<void> {
       }
 
       await evaluateCommand(url, options);
+    });
+
+  program
+    .command('serve')
+    .option('--host <host>', 'Service bind host', '127.0.0.1')
+    .option('--port <port>', 'Service bind port', '8787')
+    .option('--persist', 'Enable service persistence', true)
+    .option('--no-persist', 'Disable service persistence')
+    .action(async (options: Record<string, unknown>) => {
+      activeService = await serveCommand(options);
     });
 
   program
@@ -155,6 +168,18 @@ export async function main(): Promise<void> {
     });
 
   await program.parseAsync(process.argv);
+}
+
+export async function serveCommand(rawOptions: Record<string, unknown> = {}): Promise<StartedService> {
+  const service = await startService({
+    host: rawOptions.host,
+    port: rawOptions.port,
+    persistence: rawOptions.persist,
+    version: '3.0.11'
+  });
+
+  console.log(`Stealth Lightbeacon service listening on ${service.url}`);
+  return service;
 }
 
 export async function watchEvaluateCommand(

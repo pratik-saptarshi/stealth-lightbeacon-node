@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
+exports.serveCommand = serveCommand;
 exports.watchEvaluateCommand = watchEvaluateCommand;
 exports.searchSemanticCommand = searchSemanticCommand;
 exports.evaluateCommand = evaluateCommand;
@@ -27,13 +28,16 @@ const ontology_1 = require("./core/ontology");
 const browserPool_1 = require("./core/scraping/browserPool");
 const recon_1 = require("./core/recon");
 const watcher_1 = require("./core/watcher");
+const server_1 = require("./service/server");
 const DEFAULT_OUTPUT_DIR = 'reports';
 const DEFAULT_SEARCH_LIMIT = 10;
 async function main() {
     let activeWatchController;
+    let activeService;
     const cleanup = async () => {
         try {
             await activeWatchController?.close();
+            await activeService?.close();
             await browserPool_1.BrowserPool.getInstance().close();
         }
         catch {
@@ -75,6 +79,15 @@ async function main() {
             return;
         }
         await evaluateCommand(url, options);
+    });
+    program
+        .command('serve')
+        .option('--host <host>', 'Service bind host', '127.0.0.1')
+        .option('--port <port>', 'Service bind port', '8787')
+        .option('--persist', 'Enable service persistence', true)
+        .option('--no-persist', 'Disable service persistence')
+        .action(async (options) => {
+        activeService = await serveCommand(options);
     });
     program
         .command('search-semantic')
@@ -133,6 +146,16 @@ async function main() {
         });
     });
     await program.parseAsync(process.argv);
+}
+async function serveCommand(rawOptions = {}) {
+    const service = await (0, server_1.startService)({
+        host: rawOptions.host,
+        port: rawOptions.port,
+        persistence: rawOptions.persist,
+        version: '3.0.11'
+    });
+    console.log(`Stealth Lightbeacon service listening on ${service.url}`);
+    return service;
 }
 async function watchEvaluateCommand(rawUrl, rawOptions = {}) {
     const evaluateFn = rawOptions.evaluateFn ?? evaluateCommand;
