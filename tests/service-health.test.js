@@ -54,7 +54,13 @@ test('service exposes stable capabilities contract and json error envelope', asy
     assert.deepEqual(capabilities.body.engines, ['http', 'rendered', 'fast', 'stealth']);
     assert.deepEqual(capabilities.body.formats, ['json', 'html', 'both', 'llm', 'geo-xml']);
     assert.ok(capabilities.body.evaluators.includes('seo'));
-    assert.deepEqual(capabilities.body.endpoints, ['/health', '/capabilities']);
+    assert.deepEqual(capabilities.body.endpoints, [
+      '/health',
+      '/capabilities',
+      '/evaluations',
+      '/evaluations/{id}',
+      '/evaluations/{id}/result'
+    ]);
     assert.deepEqual(capabilities.body.security, {
       ssrfGuard: true,
       auth: false,
