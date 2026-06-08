@@ -12,6 +12,7 @@ Use this runbook to:
 
 Primary executable paths:
 - CLI auditor: `dist/cli.js` (`stealth-lightbeacon` bin)
+- HTTP service: `dist/cli.js serve` (`stealth-lightbeacon serve`)
 - MCP stdio server: `dist/mcp/stdio.js` (`stealth-lightbeacon-mcp` bin)
 
 ## 2. Prerequisites
@@ -113,8 +114,28 @@ Outputs:
   - `crawledPages`
   - `brokenPages`
   - `discoveredUrls`
-  - `discoveredCoveragePct`
-  - optional sitemap fields when available
+- `discoveredCoveragePct`
+- optional sitemap fields when available
+
+### 4.4 HTTP service mode
+
+Inspect the service command before starting a long-running local process:
+
+```bash
+node dist/cli.js serve --help
+```
+
+Default bind: `127.0.0.1:8787`. Use `--host`, `--port`, and `--no-persist` for deterministic local runs. The service exposes:
+- `GET /health`
+- `GET /capabilities`
+- `POST /evaluations`
+- `GET /evaluations/{id}`
+- `GET /evaluations/{id}/result`
+- `GET /evaluations/{id}/artifacts`
+- `GET /evaluations/{id}/artifacts/{name}`
+- `POST /recon`
+
+Evaluation endpoints return stable JSON errors for invalid input, unknown ids, and unfinished results. Artifact retrieval is scoped to the configured artifact root and rejects path traversal paths. Recon requests run independently from evaluation job state.
 
 ## 5. Validation Pipeline Before External Runs
 

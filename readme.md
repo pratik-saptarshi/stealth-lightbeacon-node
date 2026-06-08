@@ -61,6 +61,30 @@ The CLI writes `report.json`, `report.html`, and, when PDF output is enabled, `r
 | `--search-semantic <query>` | Root compatibility flag for searching persisted ontology/audit data. |
 | `--no-pdf` | Skip PDF output. Recommended for release verification until the legacy PDF path is replaced or isolated. |
 
+## Service Mode
+
+Build before running the HTTP service:
+
+```sh
+pnpm run build
+node dist/cli.js serve --help
+```
+
+The service binds to `127.0.0.1:8787` by default. Use `serve --host <host> --port <port>` to change the bind address, and `--no-persist` to disable persisted service state. In token mode, non-health endpoints require `Authorization: Bearer <token>`.
+
+Service endpoints:
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /health` | Returns service health, version, uptime, persistence status, and degraded recovery state when persisted job state cannot be loaded. |
+| `GET /capabilities` | Returns supported engines, formats, evaluators, endpoints, and security flags. |
+| `POST /evaluations` | Accepts `{ "targetUrl": "...", "options": { ... } }` and returns `202` with an evaluation id and queued status. |
+| `GET /evaluations/{id}` | Returns queued, running, succeeded, or failed evaluation state. |
+| `GET /evaluations/{id}/result` | Returns the completed result, `409` while unfinished, or `404` for unknown ids. |
+| `GET /evaluations/{id}/artifacts` | Returns a manifest for files scoped under the configured artifact root. |
+| `GET /evaluations/{id}/artifacts/{name}` | Streams a scoped artifact and rejects path traversal. |
+| `POST /recon` | Runs pre-audit reconnaissance without creating an evaluation job. |
+
 ## Secret Handling
 
 - Do not put real API keys, tokens, cookies, private URLs, or customer data in examples, reports, logs, screenshots, or issues.
