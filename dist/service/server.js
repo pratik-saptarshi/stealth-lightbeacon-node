@@ -36,8 +36,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.startService = startService;
 const http = __importStar(require("node:http"));
 const defaultEvaluators_1 = require("../core/defaultEvaluators");
+const artifacts_1 = require("./artifacts");
 const config_1 = require("./config");
 const jobs_1 = require("./jobs");
+const reconRunner_1 = require("./reconRunner");
 const ENGINES = ['http', 'rendered', 'fast', 'stealth'];
 const FORMATS = ['json', 'html', 'both', 'llm', 'geo-xml'];
 const ENDPOINTS = [
@@ -45,7 +47,10 @@ const ENDPOINTS = [
     '/capabilities',
     '/evaluations',
     '/evaluations/{id}',
-    '/evaluations/{id}/result'
+    '/evaluations/{id}/result',
+    '/evaluations/{id}/artifacts',
+    '/evaluations/{id}/artifacts/{name}',
+    '/recon'
 ];
 async function startService(input = {}) {
     const config = (0, config_1.loadServiceConfig)(input);
@@ -54,6 +59,8 @@ async function startService(input = {}) {
         auditRunner: config.auditRunner,
         clock: config.clock
     });
+    const artifacts = new artifacts_1.ArtifactStore(config.artifactRoot);
+    const reconRunner = config.reconRunner ?? reconRunner_1.defaultReconRunner;
     const server = http.createServer(async (request, response) => {
         const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
         if (request.method === 'GET' && path === '/health') {
@@ -93,6 +100,64 @@ async function startService(input = {}) {
                 ok: true,
                 id: job.id,
                 status: job.status
+            });
+            return;
+        }
+        const evaluationArtifactsMatch = path.match(/^\/evaluations\/([^/]+)\/artifacts$/);
+        if (request.method === 'GET' && evaluationArtifactsMatch) {
+            const id = evaluationArtifactsMatch[1];
+            const job = jobs.get(id);
+            if (!job) {
+                writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
+                return;
+            }
+            if (job.status !== 'succeeded') {
+                writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
+                return;
+            }
+            writeJson(response, 200, {
+                ok: true,
+                id,
+                artifacts: artifacts.list(id)
+            });
+            return;
+        }
+        const evaluationArtifactMatch = path.match(/^\/evaluations\/([^/]+)\/artifacts\/(.+)$/);
+        if (request.method === 'GET' && evaluationArtifactMatch) {
+            const id = evaluationArtifactMatch[1];
+            const job = jobs.get(id);
+            if (!job) {
+                writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
+                return;
+            }
+            const artifact = artifacts.open(id, decodeURIComponent(evaluationArtifactMatch[2]));
+            if (artifact === 'invalid') {
+                writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
+                return;
+            }
+            if (!artifact) {
+                writeJson(response, 404, errorEnvelope('artifact_not_found', 'Artifact not found'));
+                return;
+            }
+            response.writeHead(200, {
+                'content-type': `${artifact.contentType}; charset=utf-8`
+            });
+            artifact.stream.pipe(response);
+            return;
+        }
+        if (request.method === 'POST' && path === '/recon') {
+            const body = await readJsonBody(request);
+            if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
+                writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
+                return;
+            }
+            const recon = await reconRunner({
+                targetUrl: body.targetUrl.trim(),
+                allowPrivate: body.allowPrivate === true
+            });
+            writeJson(response, 200, {
+                ok: true,
+                recon
             });
             return;
         }

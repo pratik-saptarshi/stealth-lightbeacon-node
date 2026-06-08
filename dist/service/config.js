@@ -8,7 +8,9 @@ function loadServiceConfig(input = {}) {
         persistence: input.persistence !== false,
         version: parseVersion(input.version),
         clock: input.clock ?? (() => Date.now()),
-        auditRunner: input.auditRunner
+        auditRunner: input.auditRunner,
+        reconRunner: input.reconRunner,
+        artifactRoot: parseArtifactRoot(input.artifactRoot)
     };
 }
 function parseHost(host) {
@@ -23,4 +25,9 @@ function parsePort(port) {
 }
 function parseVersion(version) {
     return typeof version === 'string' && version.trim() ? version.trim() : '3.0.11';
+}
+function parseArtifactRoot(artifactRoot) {
+    return typeof artifactRoot === 'string' && artifactRoot.trim()
+        ? artifactRoot.trim()
+        : 'reports/service-artifacts';
 }

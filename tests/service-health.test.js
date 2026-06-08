@@ -59,7 +59,10 @@ test('service exposes stable capabilities contract and json error envelope', asy
       '/capabilities',
       '/evaluations',
       '/evaluations/{id}',
-      '/evaluations/{id}/result'
+      '/evaluations/{id}/result',
+      '/evaluations/{id}/artifacts',
+      '/evaluations/{id}/artifacts/{name}',
+      '/recon'
     ]);
     assert.deepEqual(capabilities.body.security, {
       ssrfGuard: true,
