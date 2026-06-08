@@ -94,6 +94,34 @@ test('all github workflow node versions satisfy package engine policy', () => {
   }
 });
 
+test('github workflows install pnpm before setup-node cache uses it', () => {
+  const workflows = {
+    'ci.yml': readCiWorkflow(),
+    'stealth-lightbeacon-audit.yml': readAuditWorkflow()
+  };
+
+  for (const [workflowName, workflow] of Object.entries(workflows)) {
+    const pnpmSetupIndex = workflow.indexOf('pnpm/action-setup@v4');
+    const setupNodeIndex = workflow.indexOf('actions/setup-node@v4');
+    assert.notEqual(pnpmSetupIndex, -1, `${workflowName} must install pnpm before setup-node cache`);
+    assert.notEqual(setupNodeIndex, -1, `${workflowName} must configure setup-node`);
+    assert.ok(
+      pnpmSetupIndex < setupNodeIndex,
+      `${workflowName} must run pnpm/action-setup before actions/setup-node cache`
+    );
+  }
+});
+
+test('github workflows pin pnpm to package manager version', () => {
+  const packageJson = readPackageJson();
+  const pnpmVersion = packageJson.packageManager.match(/^pnpm@(.+)$/)?.[1];
+  assert.match(pnpmVersion ?? '', /^\d+\.\d+\.\d+$/);
+
+  for (const workflow of [readCiWorkflow(), readAuditWorkflow()]) {
+    assert.match(workflow, new RegExp(`version: '${pnpmVersion.replaceAll('.', '\\.')}'`));
+  }
+});
+
 test('package metadata satisfies public publish gate', () => {
   const packageJson = readPackageJson();
 
