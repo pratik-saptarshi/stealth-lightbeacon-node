@@ -34,8 +34,7 @@
     "start": "pnpm run build && node dist/cli.js",
     "mcp": "pnpm run build && node dist/mcp/stdio.js",
     "release": "./tools/release.sh",
-    "release:dry": "./tools/release.sh --dry-run",
-    "preinstall": "node -e \"if(!process.env.npm_execpath||!process.env.npm_execpath.includes('pnpm')){console.error('Use pnpm only: run \\\"pnpm install\\\"');process.exit(1)}\""
+    "release:dry": "./tools/release.sh --dry-run"
   },
   "keywords": [
     "drupal",
@@ -47,10 +46,21 @@
     "crawler",
     "typescript"
   ],
-  "author": "",
+  "author": "Pratik Saptarshi",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pratik-saptarshi/stealth-lightbeacon-node.git"
+  },
+  "homepage": "https://github.com/pratik-saptarshi/stealth-lightbeacon-node#readme",
+  "bugs": {
+    "url": "https://github.com/pratik-saptarshi/stealth-lightbeacon-node/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    "dist",
+    "dist/**/*.js",
     "README.md",
     "readme.md",
     "LICENSE",

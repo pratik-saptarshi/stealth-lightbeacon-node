@@ -231,7 +231,7 @@ function isKnownPnpmCommand(command, scripts) {
     return Object.hasOwn(scripts, 'start');
   }
 
-  if (command === 'pnpm pack --dry-run' || command === 'pnpm audit') {
+  if (command === 'pnpm pack --dry-run' || command === 'pnpm audit' || command === 'pnpm audit --prod') {
     return true;
   }
 

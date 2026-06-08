@@ -30,7 +30,7 @@ test('package.json declares a runtime-only tarball boundary and bin policy', () 
 
   assert.deepEqual(result.errors, []);
   assert.deepEqual(packageJson.files, [
-    'dist',
+    'dist/**/*.js',
     'README.md',
     'readme.md',
     'LICENSE',

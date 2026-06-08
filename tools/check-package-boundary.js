@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const EXPECTED_FILES = [
-  'dist',
+  'dist/**/*.js',
   'README.md',
   'readme.md',
   'LICENSE',
@@ -57,7 +57,14 @@ function isAllowedByFilesPolicy(filePath, packageFiles) {
     return true;
   }
 
-  return packageFiles.some((entry) => filePath === entry || filePath.startsWith(`${entry}/`));
+  return packageFiles.some((entry) => {
+    if (entry.endsWith('/**/*.js')) {
+      const prefix = entry.slice(0, -'/**/*.js'.length);
+      return filePath.startsWith(`${prefix}/`) && filePath.endsWith('.js');
+    }
+
+    return filePath === entry || filePath.startsWith(`${entry}/`);
+  });
 }
 
 function isDisallowedArtifact(filePath) {
@@ -66,6 +73,7 @@ function isDisallowedArtifact(filePath) {
     /^tmp\//,
     /^temp\//,
     /^\.cache\//,
+    /^dist\/.*\.tsbuildinfo$/,
     /^\.npmrc$/,
     /^\.env(?:\.|$)/,
     /^node_modules\//,
