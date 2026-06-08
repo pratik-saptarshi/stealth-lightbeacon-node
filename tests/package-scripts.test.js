@@ -126,6 +126,7 @@ test('scheduled audit workflow invokes the built cli artifact directly', () => {
   const workflow = readAuditWorkflow();
 
   assert.match(workflow, /node dist\/cli\.js evaluate "\$AUDIT_TARGET_URL"/);
+  assert.match(workflow, /--no-persist/);
   assert.doesNotMatch(workflow, /pnpm exec stealth-lightbeacon/);
 });
 

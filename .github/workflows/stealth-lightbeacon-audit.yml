@@ -58,6 +58,7 @@ jobs:
             --max-urls "$AUDIT_MAX_URLS" \
             --format both \
             --out ./audit-results \
+            --no-persist \
             --no-pdf
 
       - name: Archive audit reports
