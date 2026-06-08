@@ -39,6 +39,26 @@ test('parses documented shell command blocks from release docs', () => {
       command.command.startsWith('node scripts/summarize-coverage.js .tmp/reports/external')
     )
   );
+  assert.ok(commands.some((command) => command.command === 'node dist/cli.js serve --help'));
+});
+
+test('service docs describe executable cli and api behavior', () => {
+  const combined = `${readDoc('readme.md').content}\n${readDoc('CLI-readme.md').content}`;
+
+  for (const expected of [
+    'node dist/cli.js serve --help',
+    'GET /health',
+    'GET /capabilities',
+    'POST /evaluations',
+    'GET /evaluations/{id}/result',
+    'GET /evaluations/{id}/artifacts/{name}',
+    'POST /recon'
+  ]) {
+    assert.match(combined, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  assert.match(combined, /Bearer <token>/);
+  assert.match(combined, /rejects path traversal/i);
 });
 
 test('documented local commands resolve to known package scripts or files', () => {
