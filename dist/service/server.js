@@ -35,6 +35,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.startService = startService;
 const http = __importStar(require("node:http"));
+const https = __importStar(require("node:https"));
+const node_fs_1 = require("node:fs");
+const node_path_1 = require("node:path");
 const defaultEvaluators_1 = require("../core/defaultEvaluators");
 const artifacts_1 = require("./artifacts");
 const config_1 = require("./config");
@@ -57,20 +60,26 @@ async function startService(input = {}) {
     const startedAt = config.clock();
     const jobs = new jobs_1.EvaluationJobStore({
         auditRunner: config.auditRunner,
-        clock: config.clock
+        clock: config.clock,
+        statePath: config.persistence ? (0, node_path_1.join)(config.artifactRoot, 'jobs.json') : undefined
     });
     const artifacts = new artifacts_1.ArtifactStore(config.artifactRoot);
     const reconRunner = config.reconRunner ?? reconRunner_1.defaultReconRunner;
-    const server = http.createServer(async (request, response) => {
+    const server = createHttpServer(config.tls, async (request, response) => {
         const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
         if (request.method === 'GET' && path === '/health') {
             writeJson(response, 200, {
-                ok: true,
-                status: 'ok',
+                ok: !jobs.recoveryError,
+                status: jobs.recoveryError ? 'degraded' : 'ok',
                 version: config.version,
                 uptimeMs: Math.max(0, config.clock() - startedAt),
-                persistence: { enabled: config.persistence }
+                persistence: { enabled: config.persistence },
+                ...(jobs.recoveryError ? { recovery: { ok: false, error: jobs.recoveryError } } : {})
             });
+            return;
+        }
+        if (!isAuthorized(request, config.authToken)) {
+            writeJson(response, 401, errorEnvelope('unauthorized', 'Bearer token is required'));
             return;
         }
         if (request.method === 'GET' && path === '/capabilities') {
@@ -82,8 +91,8 @@ async function startService(input = {}) {
                 endpoints: [...ENDPOINTS],
                 security: {
                     ssrfGuard: true,
-                    auth: false,
-                    tls: false
+                    auth: Boolean(config.authToken),
+                    tls: Boolean(config.tls)
                 }
             });
             return;
@@ -213,9 +222,29 @@ async function startService(input = {}) {
             host: config.host,
             port: address.port
         },
-        url: `http://${config.host}:${address.port}`,
+        url: `${config.tls ? 'https' : 'http'}://${config.host}:${address.port}`,
         close: () => closeServer(server)
     };
+}
+function createHttpServer(tls, listener) {
+    if (!tls) {
+        return http.createServer(listener);
+    }
+    try {
+        return https.createServer({
+            key: (0, node_fs_1.readFileSync)(tls.keyPath),
+            cert: (0, node_fs_1.readFileSync)(tls.certPath)
+        }, listener);
+    }
+    catch (error) {
+        throw new Error(`TLS config is invalid: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+function isAuthorized(request, authToken) {
+    if (!authToken) {
+        return true;
+    }
+    return request.headers.authorization === `Bearer ${authToken}`;
 }
 function readJsonBody(request) {
     return new Promise((resolve) => {

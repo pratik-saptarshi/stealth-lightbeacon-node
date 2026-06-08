@@ -10,7 +10,9 @@ function loadServiceConfig(input = {}) {
         clock: input.clock ?? (() => Date.now()),
         auditRunner: input.auditRunner,
         reconRunner: input.reconRunner,
-        artifactRoot: parseArtifactRoot(input.artifactRoot)
+        artifactRoot: parseArtifactRoot(input.artifactRoot),
+        authToken: parseOptionalString(input.authToken),
+        tls: parseTls(input.tlsKeyPath, input.tlsCertPath)
     };
 }
 function parseHost(host) {
@@ -30,4 +32,18 @@ function parseArtifactRoot(artifactRoot) {
     return typeof artifactRoot === 'string' && artifactRoot.trim()
         ? artifactRoot.trim()
         : 'reports/service-artifacts';
+}
+function parseOptionalString(value) {
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+function parseTls(keyPath, certPath) {
+    const key = parseOptionalString(keyPath);
+    const cert = parseOptionalString(certPath);
+    if (!key && !cert) {
+        return undefined;
+    }
+    return {
+        keyPath: key ?? '',
+        certPath: cert ?? ''
+    };
 }

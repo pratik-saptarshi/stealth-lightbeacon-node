@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { defaultAuditRunner, type AuditRunner, type EvaluationResult } from './auditRunner';
 
 export type EvaluationStatus = 'queued' | 'running' | 'succeeded' | 'failed';
@@ -18,6 +20,7 @@ export interface EvaluationJobSnapshot {
 export interface EvaluationJobStoreOptions {
   auditRunner?: AuditRunner;
   clock?: () => number;
+  statePath?: string;
 }
 
 interface EvaluationJob extends EvaluationJobSnapshot {
@@ -27,12 +30,19 @@ interface EvaluationJob extends EvaluationJobSnapshot {
 export class EvaluationJobStore {
   private readonly auditRunner: AuditRunner;
   private readonly clock: () => number;
+  private readonly statePath?: string;
   private readonly jobs = new Map<string, EvaluationJob>();
   private sequence = 0;
+  readonly recoveryError?: {
+    code: string;
+    message: string;
+  };
 
   constructor(options: EvaluationJobStoreOptions = {}) {
     this.auditRunner = options.auditRunner ?? defaultAuditRunner;
     this.clock = options.clock ?? (() => Date.now());
+    this.statePath = options.statePath;
+    this.recoveryError = this.load();
   }
 
   create(targetUrl: string, options: Record<string, unknown> = {}): EvaluationJobSnapshot {
@@ -78,6 +88,7 @@ export class EvaluationJobStore {
       });
       job.result = result;
       this.update(job, { status: 'succeeded' });
+      this.persist();
     } catch (error) {
       this.update(job, {
         status: 'failed',
@@ -86,6 +97,7 @@ export class EvaluationJobStore {
           message: error instanceof Error ? error.message : String(error)
         }
       });
+      this.persist();
     }
   }
 
@@ -101,6 +113,41 @@ export class EvaluationJobStore {
   private timestamp(): string {
     return new Date(this.clock()).toISOString();
   }
+
+  private load(): { code: string; message: string } | undefined {
+    if (!this.statePath || !existsSync(this.statePath)) {
+      return undefined;
+    }
+
+    try {
+      const parsed = JSON.parse(readFileSync(this.statePath, 'utf8')) as unknown;
+      if (!isPersistedState(parsed)) {
+        throw new Error('Invalid job state shape');
+      }
+      this.sequence = parsed.sequence;
+      for (const job of parsed.jobs) {
+        this.jobs.set(job.id, job);
+      }
+      return undefined;
+    } catch (error) {
+      return {
+        code: 'state_recovery_failed',
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  private persist(): void {
+    if (!this.statePath) {
+      return;
+    }
+    mkdirSync(dirname(this.statePath), { recursive: true });
+    writeFileSync(this.statePath, JSON.stringify({
+      sequence: this.sequence,
+      jobs: Array.from(this.jobs.values())
+        .filter((job) => job.status === 'succeeded' || job.status === 'failed')
+    }));
+  }
 }
 
 function snapshot(job: EvaluationJob): EvaluationJobSnapshot {
@@ -113,4 +160,12 @@ function snapshot(job: EvaluationJob): EvaluationJobSnapshot {
     updatedAt: job.updatedAt,
     ...(job.error ? { error: job.error } : {})
   };
+}
+
+function isPersistedState(value: unknown): value is { sequence: number; jobs: EvaluationJob[] } {
+  return Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as { sequence?: unknown }).sequence === 'number' &&
+    Array.isArray((value as { jobs?: unknown }).jobs);
 }

@@ -1,4 +1,7 @@
 import * as http from 'node:http';
+import * as https from 'node:https';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { listDefaultEvaluatorPlugins } from '../core/defaultEvaluators';
 import { ArtifactStore } from './artifacts';
 import { loadServiceConfig, type ServiceConfigInput } from './config';
@@ -32,21 +35,28 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
   const startedAt = config.clock();
   const jobs = new EvaluationJobStore({
     auditRunner: config.auditRunner,
-    clock: config.clock
+    clock: config.clock,
+    statePath: config.persistence ? join(config.artifactRoot, 'jobs.json') : undefined
   });
   const artifacts = new ArtifactStore(config.artifactRoot);
   const reconRunner = config.reconRunner ?? defaultReconRunner;
-  const server = http.createServer(async (request, response) => {
+  const server = createHttpServer(config.tls, async (request, response) => {
     const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
 
     if (request.method === 'GET' && path === '/health') {
       writeJson(response, 200, {
-        ok: true,
-        status: 'ok',
+        ok: !jobs.recoveryError,
+        status: jobs.recoveryError ? 'degraded' : 'ok',
         version: config.version,
         uptimeMs: Math.max(0, config.clock() - startedAt),
-        persistence: { enabled: config.persistence }
+        persistence: { enabled: config.persistence },
+        ...(jobs.recoveryError ? { recovery: { ok: false, error: jobs.recoveryError } } : {})
       });
+      return;
+    }
+
+    if (!isAuthorized(request, config.authToken)) {
+      writeJson(response, 401, errorEnvelope('unauthorized', 'Bearer token is required'));
       return;
     }
 
@@ -59,8 +69,8 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
         endpoints: [...ENDPOINTS],
         security: {
           ssrfGuard: true,
-          auth: false,
-          tls: false
+          auth: Boolean(config.authToken),
+          tls: Boolean(config.tls)
         }
       });
       return;
@@ -200,9 +210,34 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
       host: config.host,
       port: address.port
     },
-    url: `http://${config.host}:${address.port}`,
+    url: `${config.tls ? 'https' : 'http'}://${config.host}:${address.port}`,
     close: () => closeServer(server)
   };
+}
+
+function createHttpServer(
+  tls: { keyPath: string; certPath: string } | undefined,
+  listener: http.RequestListener
+): http.Server | https.Server {
+  if (!tls) {
+    return http.createServer(listener);
+  }
+
+  try {
+    return https.createServer({
+      key: readFileSync(tls.keyPath),
+      cert: readFileSync(tls.certPath)
+    }, listener);
+  } catch (error) {
+    throw new Error(`TLS config is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function isAuthorized(request: http.IncomingMessage, authToken: string | undefined): boolean {
+  if (!authToken) {
+    return true;
+  }
+  return request.headers.authorization === `Bearer ${authToken}`;
 }
 
 function readJsonBody(request: http.IncomingMessage): Promise<Record<string, unknown> | undefined> {
