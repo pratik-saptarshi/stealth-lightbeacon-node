@@ -4,7 +4,7 @@
   <p><strong>Repository:</strong> <code>stealth-lightbeacon-node</code></p>
   <p><strong>Origin:</strong> <code>https://github.com/pratik-saptarshi/stealth-lightbeacon-node</code></p>
   <p><strong>Package:</strong> <code>stealth-lightbeacon-node@3.0.11</code></p>
-  <p><strong>Runtime:</strong> Node.js CLI and MCP stdio server</p>
+  <p><strong>Runtime:</strong> Node.js CLI, HTTP service, and MCP stdio server</p>
   <p><strong>Package manager:</strong> <code>pnpm@11.4.0</code></p>
   <p><strong>Node engine:</strong> <code>&gt;=24.0.0</code></p>
   <p><strong>Publish target:</strong> public npm package, global-installable CLI</p>
@@ -21,6 +21,7 @@
 | Library main | `main` | `dist/index.js` |
 | CLI binary | `bin.stealth-lightbeacon` | `dist/cli.js` |
 | MCP binary | `bin.stealth-lightbeacon-mcp` | `dist/mcp/stdio.js` |
+| HTTP service | `stealth-lightbeacon serve` | `dist/service/server.js` |
 
 ### 1.2 Package Boundary
 
@@ -66,10 +67,35 @@ Required public package metadata:
 - `stealth-lightbeacon evaluate <url>`: bounded audit execution.
 - `stealth-lightbeacon recon <url>`: pre-audit reconnaissance.
 - `stealth-lightbeacon search-semantic <query>`: persisted ontology search.
+- `stealth-lightbeacon serve`: local HTTP service mode.
 - Root compatibility mode supports `--search-semantic <query>`.
 - Reserved or controlled flags include `--http2`, `--persist`, `--no-persist`, `--allow-private`, and `--api-key`.
 
-### 2.2 MCP Surface
+### 2.2 HTTP Service Surface
+
+- Service runtime modules:
+  - `dist/service/server.js`
+  - `dist/service/config.js`
+  - `dist/service/jobs.js`
+  - `dist/service/auditRunner.js`
+  - `dist/service/artifacts.js`
+  - `dist/service/reconRunner.js`
+- Implemented endpoints:
+  - `GET /health`
+  - `GET /capabilities`
+  - `POST /evaluations`
+  - `GET /evaluations/{id}`
+  - `GET /evaluations/{id}/result`
+  - `GET /evaluations/{id}/artifacts`
+  - `GET /evaluations/{id}/artifacts/{name}`
+  - `POST /recon`
+- Security/recovery controls:
+  - bearer-token auth is opt-in for non-health endpoints
+  - TLS key/cert config fails fast when invalid
+  - terminal evaluation job state reloads from the configured artifact root
+  - corrupted recovered state produces degraded health with bounded errors
+
+### 2.3 MCP Surface
 
 - MCP stdio binary: `dist/mcp/stdio.js`.
 - Source modules:
@@ -78,7 +104,7 @@ Required public package metadata:
   - `src/mcp/server.ts`
   - `src/mcp/stdio.ts`
 
-### 2.3 Core Modules
+### 2.4 Core Modules
 
 - Orchestration and crawl lifecycle:
   - `src/core/orchestrator.ts`
@@ -101,7 +127,7 @@ Required public package metadata:
 - Recon:
   - `src/core/recon.ts`
 
-### 2.4 Evaluators
+### 2.5 Evaluators
 
 - `src/evaluators/accessibility.ts`
 - `src/evaluators/aeo.ts`
@@ -111,7 +137,7 @@ Required public package metadata:
 - `src/evaluators/seo.ts`
 - `src/evaluators/ux.ts`
 
-### 2.5 Desktop Subtree
+### 2.6 Desktop Subtree
 
 `desktop/` is a sibling development surface and is out of scope for the root npm tarball unless a future release explicitly changes the package boundary.
 
@@ -189,6 +215,19 @@ Required public package metadata:
 - `pnpm audit --prod`
 - `pnpm pack --dry-run`
 - `pnpm run release:dry`
+
+### 5.1.1 `pnpm pack --dry-run` evidence
+
+Latest checked dry-run output for `stealth-lightbeacon-node@3.0.11` included only:
+
+- `.env.example`
+- `dist/**/*.js`, including service runtime files under `dist/service/`
+- `LICENSE`
+- `package.json`
+- `readme.md`
+- `SECURITY.md`
+
+The dry-run output did not include `src/`, `tests/`, `docs/`, `.github/`, `.beads/`, `desktop/`, `.npmrc`, `.pnpm-store/`, `dist/.tsbuildinfo`, local reports, or cache directories.
 
 ### 5.2 Coverage Gate
 

@@ -24,7 +24,11 @@ test('package.json declares a runtime-only tarball boundary and bin policy', () 
       '.env.example',
       'dist/index.js',
       'dist/cli.js',
-      'dist/mcp/stdio.js'
+      'dist/mcp/stdio.js',
+      'dist/service/server.js',
+      'dist/service/jobs.js',
+      'dist/service/artifacts.js',
+      'dist/service/reconRunner.js'
     ]
   });
 
@@ -51,10 +55,15 @@ npm notice 1.1kB package/package.json
 npm notice 3.2kB package/dist/index.js
 npm notice 1.9kB package/dist/cli.js
 npm notice 1.1kB package/dist/mcp/stdio.js
+npm notice 1.1kB package/dist/service/server.js
+npm notice 1.0kB package/dist/service/jobs.js
+npm notice 1.0kB package/dist/service/artifacts.js
+npm notice 1.0kB package/dist/service/reconRunner.js
 npm notice 1.0kB package/README.md
 npm notice 1.0kB package/LICENSE
 npm notice 1.0kB package/SECURITY.md
 npm notice 1.0kB package/.env.example
+npm notice 1.0kB package/dist/.tsbuildinfo
 npm notice 1.0kB package/tests/config.test.js
 npm notice 1.0kB package/tmp/local.json
 npm notice 1.0kB package/.npmrc
@@ -69,19 +78,43 @@ npm notice 1.0kB package/.cache/playwright/state.json
     'dist/index.js',
     'dist/cli.js',
     'dist/mcp/stdio.js',
+    'dist/service/server.js',
+    'dist/service/jobs.js',
+    'dist/service/artifacts.js',
+    'dist/service/reconRunner.js',
     'README.md',
     'LICENSE',
     'SECURITY.md',
     '.env.example',
+    'dist/.tsbuildinfo',
     'tests/config.test.js',
     'tmp/local.json',
     '.npmrc',
     '.cache/playwright/state.json'
   ]);
   assert.deepEqual(result.errors, [
+    'disallowed tarball path: dist/.tsbuildinfo',
     'disallowed tarball path: tests/config.test.js',
     'disallowed tarball path: tmp/local.json',
     'disallowed tarball path: .npmrc',
     'disallowed tarball path: .cache/playwright/state.json'
   ]);
+});
+
+test('bill of materials records current package and service evidence', () => {
+  const bom = fs.readFileSync(path.join(__dirname, '..', 'docs', 'bill-of-materials.html.md'), 'utf8');
+
+  for (const expected of [
+    'dist/service/server.js',
+    'dist/service/jobs.js',
+    'dist/service/artifacts.js',
+    'dist/service/reconRunner.js',
+    'GET /health',
+    'POST /evaluations',
+    'GET /evaluations/{id}/artifacts/{name}',
+    'POST /recon',
+    'Latest checked dry-run output'
+  ]) {
+    assert.match(bom, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
 });
