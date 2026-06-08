@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit --incremental false",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "pnpm run build",
     "pack:dry": "pnpm pack --dry-run",
@@ -24,18 +24,17 @@
     "coverage": "node --experimental-test-coverage --test tests/*.test.js",
     "coverage:ci": "node --experimental-test-coverage --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')",
     "coverage:check": "node tools/check-coverage.js",
-    "quality:typecheck": "tsc -p tsconfig.json --noEmit",
+    "quality:typecheck": "tsc -p tsconfig.json --noEmit --incremental false",
     "quality:unit": "pnpm run test:unit:ci",
     "quality:mcp:contract": "pnpm run test:mcp:contract",
     "quality:coverage": "COVERAGE_MODE=ci node tools/check-coverage.js",
     "quality:integration:mcp": "pnpm run test:mcp:integration",
-    "quality:check": "tsc -p tsconfig.json --noEmit && node --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js') && node --test tests/mcp.test.js && COVERAGE_MODE=ci node tools/check-coverage.js",
+    "quality:check": "tsc -p tsconfig.json --noEmit --incremental false && node --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js') && node --test tests/mcp.test.js && COVERAGE_MODE=ci node tools/check-coverage.js",
     "test:watch": "node --test --watch tests/*.test.js",
     "start": "pnpm run build && node dist/cli.js",
     "mcp": "pnpm run build && node dist/mcp/stdio.js",
     "release": "./tools/release.sh",
-    "release:dry": "./tools/release.sh --dry-run",
-    "preinstall": "node -e \"if(!process.env.npm_execpath||!process.env.npm_execpath.includes('pnpm')){console.error('Use pnpm only: run \\\"pnpm install\\\"');process.exit(1)}\""
+    "release:dry": "./tools/release.sh --dry-run --ci"
   },
   "keywords": [
     "drupal",
@@ -47,10 +46,21 @@
     "crawler",
     "typescript"
   ],
-  "author": "",
+  "author": "Pratik Saptarshi",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pratik-saptarshi/stealth-lightbeacon-node.git"
+  },
+  "homepage": "https://github.com/pratik-saptarshi/stealth-lightbeacon-node#readme",
+  "bugs": {
+    "url": "https://github.com/pratik-saptarshi/stealth-lightbeacon-node/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    "dist",
+    "dist/**/*.js",
     "README.md",
     "readme.md",
     "LICENSE",

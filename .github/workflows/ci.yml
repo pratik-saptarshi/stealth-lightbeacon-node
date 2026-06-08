@@ -34,3 +34,14 @@ jobs:
 
       - name: Run Quality Checks
         run: pnpm run quality:check
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod
+
+      - name: Verify npm package boundary
+        run: pnpm pack --dry-run
+
+      - name: Smoke test packaged binaries
+        run: |
+          node dist/cli.js --help
+          test -f dist/mcp/stdio.js

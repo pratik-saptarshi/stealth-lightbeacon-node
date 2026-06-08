@@ -4,12 +4,11 @@ TypeScript crawl orchestration and multi-domain site auditing for technical SEO,
 
 ## Current Release Posture
 
-This repository is not ready for public npm publication until the package boundary is explicit. Before publishing, choose one model and document it in `package.json`:
+This repository is configured as an npm-publishable package with a strict `files` allowlist and public `publishConfig`.
+Every release candidate must pass the publishing gate in `docs/publishing-roadmap-checklist.md` before it is pushed, tagged, or published.
 
-- Source-only GitHub release: mark the package `private` and do not publish to npm.
-- npm-publishable release: add a strict `files` allowlist and `publishConfig`, then verify the tarball with `pnpm pack --dry-run`.
-
-Generated audit outputs, local caches, graph reports, and integration logs are development artifacts. They must stay out of commits and release tarballs.
+Generated audit outputs, local caches, graph reports, package dry-run logs, and integration logs are development artifacts.
+They must stay out of commits and release tarballs unless explicitly listed in the release evidence bundle.
 
 ## Features
 
@@ -106,8 +105,11 @@ Release candidates should additionally run:
 
 ```sh
 pnpm pack --dry-run
-pnpm audit
+pnpm audit --prod
+pnpm run release:dry
 ```
+
+Before publishing, verify package metadata, tarball contents, secret-scan results, security alerts, README/SECURITY guidance, and GitHub Actions status against `docs/publishing-roadmap-checklist.md`.
 
 Coverage thresholds are enforced by `pnpm run coverage:check`:
 - line coverage >= `80%`
