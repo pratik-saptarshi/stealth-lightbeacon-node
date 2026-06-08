@@ -7,7 +7,8 @@ function loadServiceConfig(input = {}) {
         port: parsePort(input.port),
         persistence: input.persistence !== false,
         version: parseVersion(input.version),
-        clock: input.clock ?? (() => Date.now())
+        clock: input.clock ?? (() => Date.now()),
+        auditRunner: input.auditRunner
     };
 }
 function parseHost(host) {

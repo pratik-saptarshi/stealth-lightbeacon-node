@@ -37,13 +37,24 @@ exports.startService = startService;
 const http = __importStar(require("node:http"));
 const defaultEvaluators_1 = require("../core/defaultEvaluators");
 const config_1 = require("./config");
+const jobs_1 = require("./jobs");
 const ENGINES = ['http', 'rendered', 'fast', 'stealth'];
 const FORMATS = ['json', 'html', 'both', 'llm', 'geo-xml'];
-const ENDPOINTS = ['/health', '/capabilities'];
+const ENDPOINTS = [
+    '/health',
+    '/capabilities',
+    '/evaluations',
+    '/evaluations/{id}',
+    '/evaluations/{id}/result'
+];
 async function startService(input = {}) {
     const config = (0, config_1.loadServiceConfig)(input);
     const startedAt = config.clock();
-    const server = http.createServer((request, response) => {
+    const jobs = new jobs_1.EvaluationJobStore({
+        auditRunner: config.auditRunner,
+        clock: config.clock
+    });
+    const server = http.createServer(async (request, response) => {
         const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
         if (request.method === 'GET' && path === '/health') {
             writeJson(response, 200, {
@@ -70,6 +81,54 @@ async function startService(input = {}) {
             });
             return;
         }
+        if (request.method === 'POST' && path === '/evaluations') {
+            const body = await readJsonBody(request);
+            if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
+                writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
+                return;
+            }
+            const options = isRecord(body.options) ? body.options : {};
+            const job = jobs.create(body.targetUrl.trim(), options);
+            writeJson(response, 202, {
+                ok: true,
+                id: job.id,
+                status: job.status
+            });
+            return;
+        }
+        const evaluationResultMatch = path.match(/^\/evaluations\/([^/]+)\/result$/);
+        if (request.method === 'GET' && evaluationResultMatch) {
+            const id = evaluationResultMatch[1];
+            const { job, result } = jobs.getResult(id);
+            if (!job) {
+                writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
+                return;
+            }
+            if (job.status !== 'succeeded') {
+                writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
+                return;
+            }
+            writeJson(response, 200, {
+                ok: true,
+                id,
+                status: job.status,
+                result
+            });
+            return;
+        }
+        const evaluationMatch = path.match(/^\/evaluations\/([^/]+)$/);
+        if (request.method === 'GET' && evaluationMatch) {
+            const job = jobs.get(evaluationMatch[1]);
+            if (!job) {
+                writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
+                return;
+            }
+            writeJson(response, 200, {
+                ok: true,
+                job
+            });
+            return;
+        }
         writeJson(response, 404, {
             ok: false,
             error: {
@@ -92,6 +151,38 @@ async function startService(input = {}) {
         url: `http://${config.host}:${address.port}`,
         close: () => closeServer(server)
     };
+}
+function readJsonBody(request) {
+    return new Promise((resolve) => {
+        const chunks = [];
+        request.on('data', (chunk) => {
+            chunks.push(chunk);
+        });
+        request.on('end', () => {
+            try {
+                const text = Buffer.concat(chunks).toString('utf8');
+                resolve(isRecord(JSON.parse(text)) ? JSON.parse(text) : undefined);
+            }
+            catch {
+                resolve(undefined);
+            }
+        });
+        request.on('error', () => {
+            resolve(undefined);
+        });
+    });
+}
+function errorEnvelope(code, message) {
+    return {
+        ok: false,
+        error: {
+            code,
+            message
+        }
+    };
+}
+function isRecord(value) {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 function writeJson(response, statusCode, body) {
     response.writeHead(statusCode, {

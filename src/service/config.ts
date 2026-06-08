@@ -1,9 +1,12 @@
+import type { AuditRunner } from './auditRunner';
+
 export interface ServiceConfig {
   host: string;
   port: number;
   persistence: boolean;
   version: string;
   clock: () => number;
+  auditRunner?: AuditRunner;
 }
 
 export interface ServiceConfigInput {
@@ -12,6 +15,7 @@ export interface ServiceConfigInput {
   persistence?: unknown;
   version?: unknown;
   clock?: () => number;
+  auditRunner?: AuditRunner;
 }
 
 export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig {
@@ -20,7 +24,8 @@ export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig
     port: parsePort(input.port),
     persistence: input.persistence !== false,
     version: parseVersion(input.version),
-    clock: input.clock ?? (() => Date.now())
+    clock: input.clock ?? (() => Date.now()),
+    auditRunner: input.auditRunner
   };
 }
 
