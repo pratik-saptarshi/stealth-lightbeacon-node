@@ -76,6 +76,22 @@ test('documented local commands resolve to known package scripts or files', () =
   assert.ok(result.checkedCommands.length >= 10);
 });
 
+test('documented network and release commands are manually gated', () => {
+  const result = validateDocumentedCommands({
+    rootDir,
+    docs: [
+      readDoc('readme.md'),
+      readDoc('CLI-readme.md'),
+      readDoc('docs/release-process.md'),
+    ],
+    enforceManualGates: true,
+  });
+
+  assert.deepEqual(result.unknownCommands, []);
+  assert.deepEqual(result.manualGateRequired, []);
+  assert.ok(result.manualGatedCommands.length >= 3);
+});
+
 test('network and destructive examples require explicit manual gates when enforced', () => {
   const doc = {
     filePath: 'synthetic.md',
