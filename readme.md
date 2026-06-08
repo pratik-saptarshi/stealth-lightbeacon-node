@@ -48,12 +48,17 @@ The CLI writes `report.json`, `report.html`, and, when PDF output is enabled, `r
 | `-n, --max-urls <count>` | Maximum crawled URLs. |
 | `--render` | Render JavaScript via Playwright. |
 | `--engine <engine>` | Fetch engine: `http`, `rendered`, `fast`, or `stealth`. |
+| `--recon-auto` | Run pre-audit reconnaissance and apply recommended engine/throttle settings. |
 | `--http2` | Reserved flag for HTTP/2 transport support. |
 | `--budget <path>` | Budget configuration JSON path. |
 | `--check-links` | Check discovered outbound links. |
 | `--check-api` | Probe the Drupal JSON:API user endpoint. |
 | `--allow-private` | Allow private or loopback targets. Do not use for untrusted URLs. |
 | `--api-key <key>` | Compatibility path for Google PageSpeed Insights. Prefer environment or config-based secret injection; command-line secrets can appear in shell history and process listings. |
+| `--persist`, `--no-persist` | Enable or skip durable audit and ontology persistence. |
+| `--watch` | Keep the process alive and rerun the audit after watched source changes. |
+| `--watch-debounce-ms <ms>` | Debounce interval for watch-triggered reruns. |
+| `--search-semantic <query>` | Root compatibility flag for searching persisted ontology/audit data. |
 | `--no-pdf` | Skip PDF output. Recommended for release verification until the legacy PDF path is replaced or isolated. |
 
 ## Secret Handling

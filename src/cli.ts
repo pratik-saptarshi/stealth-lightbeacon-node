@@ -14,6 +14,7 @@ import { SSRFGuard } from './core/ssrf';
 import { createOntologyStore, type OntologySearchResult, type OntologyStore, type OntologyStoreOptions } from './core/ontology';
 import { BrowserPool } from './core/scraping/browserPool';
 import { PreAuditRecon, type ReconRecommendation } from './core/recon';
+import { WorkspaceWatcher, type WorkspaceWatcherOptions } from './core/watcher';
 
 const DEFAULT_OUTPUT_DIR = 'reports';
 const DEFAULT_SEARCH_LIMIT = 10;
@@ -25,9 +26,27 @@ interface SearchSemanticOptions {
   limit?: unknown;
 }
 
+interface WatchEvaluateOptions extends Record<string, unknown> {
+  closeResources?: () => Promise<void>;
+  createWatcher?: (
+    workspaceRoot: string,
+    debounceMs: number,
+    options: WorkspaceWatcherOptions
+  ) => Pick<WorkspaceWatcher, 'close' | 'start'>;
+  evaluateFn?: (rawUrl: string, rawOptions: Record<string, unknown>) => Promise<void>;
+  watchDebounceMs?: unknown;
+  workspaceRoot?: unknown;
+}
+
+interface WatchController {
+  close(): Promise<void>;
+}
+
 export async function main(): Promise<void> {
+  let activeWatchController: WatchController | undefined;
   const cleanup = async () => {
     try {
+      await activeWatchController?.close();
       await BrowserPool.getInstance().close();
     } catch {
       // Ignore cleanup error
@@ -62,8 +81,15 @@ export async function main(): Promise<void> {
     .option('--api-key <key>', 'Google PageSpeed Insights API key')
     .option('--persist', 'Persist audit and ontology state', true)
     .option('--no-persist', 'Skip audit and ontology persistence')
+    .option('--watch', 'Rerun the audit when source files change', false)
+    .option('--watch-debounce-ms <ms>', 'Watch debounce interval in milliseconds', '2000')
     .option('--no-pdf', 'Skip PDF output')
     .action(async (url: string, options: Record<string, unknown>) => {
+      if (options.watch) {
+        activeWatchController = await watchEvaluateCommand(url, options);
+        return;
+      }
+
       await evaluateCommand(url, options);
     });
 
@@ -129,6 +155,66 @@ export async function main(): Promise<void> {
     });
 
   await program.parseAsync(process.argv);
+}
+
+export async function watchEvaluateCommand(
+  rawUrl: string,
+  rawOptions: WatchEvaluateOptions = {}
+): Promise<WatchController> {
+  const evaluateFn = rawOptions.evaluateFn ?? evaluateCommand;
+  const closeResources = rawOptions.closeResources ?? (async () => {
+    await BrowserPool.getInstance().close();
+  });
+  const createWatcher = rawOptions.createWatcher ?? ((workspaceRoot, debounceMs, options) => (
+    new WorkspaceWatcher(workspaceRoot, debounceMs, options)
+  ));
+  const workspaceRoot = typeof rawOptions.workspaceRoot === 'string'
+    ? rawOptions.workspaceRoot
+    : process.cwd();
+  const debounceMs = parseWatchDebounceMs(rawOptions.watchDebounceMs);
+  let closed = false;
+  let running = Promise.resolve();
+
+  const runAudit = (changedFiles: string[] = []) => {
+    if (closed) {
+      return running;
+    }
+
+    running = running.then(() => evaluateFn(rawUrl, {
+      ...rawOptions,
+      watch: false,
+      watchChangedFiles: changedFiles
+    }));
+    return running;
+  };
+  const watcher = createWatcher(workspaceRoot, debounceMs, {
+    onChange: (changedFiles) => {
+      return runAudit(changedFiles);
+    }
+  });
+
+  await runAudit();
+  watcher.start();
+
+  return {
+    async close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      watcher.close();
+      await running;
+      await closeResources();
+    }
+  };
+}
+
+function parseWatchDebounceMs(rawDebounceMs: unknown): number {
+  const debounceMs = Number(rawDebounceMs ?? 2000);
+  if (!Number.isInteger(debounceMs) || debounceMs < 0) {
+    return 2000;
+  }
+  return debounceMs;
 }
 
 export async function searchSemanticCommand(
