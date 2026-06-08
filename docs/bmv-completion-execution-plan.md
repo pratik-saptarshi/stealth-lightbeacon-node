@@ -438,6 +438,44 @@ Final Recommendation: Applied with caveats.
 
 Dissent Ledger: none.
 
+## Post-Overseer Remediation Roadmap
+
+Review source: `$overseer` panel on `main` after parity closeout, integrated by
+`$plan-review-integrator`.
+
+Parent epic: `stealth-lightbeacon-node-43w` — Overseer remediation: service
+security and release governance hardening.
+
+### Capability Map
+
+| Capability | Epic / Feature | Beads | Functions / surfaces |
+| --- | --- | --- | --- |
+| Service hardening | Public service and artifact safety | `43w.1` | `serveCommand`, `startService`, `readJsonBody`, `ArtifactStore.open`, `defaultReconRunner` |
+| Evaluation service runtime | Runtime service contracts | `43w.2` | `defaultAuditRunner`, `EvaluationJobStore.run`, `StartedService.close`, route handlers |
+| Release governance | Publish gate enforcement | `43w.3` | `parsePackDryRunFiles`, `validatePackageBoundary`, `validateReleaseSecurityGate`, `tools/release.sh`, CI |
+
+### Finding Integration Summary
+
+| Finding | Severity | Category | Beads | Acceptance gate |
+| --- | --- | --- | --- | --- |
+| Public `serve --host 0.0.0.0` can expose unauthenticated cleartext service and request-controlled private recon | P1 | Must-fix | `43w.1.1` | Non-loopback binds require auth/TLS or explicit unsafe opt-in; private recon is service-config gated |
+| JSON bodies are unbounded | P2 | Bundle | `43w.1.2` | Oversized `/evaluations` and `/recon` requests return bounded `413` responses |
+| Direct artifact download bypasses terminal job status | P2 | Must-fix | `43w.1.3` | Direct artifact download returns `409` unless job status is `succeeded` |
+| Artifact reads follow symlinks outside artifact root | P2 | Must-fix | `43w.1.4` | Symlink escapes are rejected with `lstat`/`realpath` tests |
+| Public health leaks recovery details | P3 | Defer | `43w.1.5` | Public health redacts raw recovery errors; authenticated diagnostics stay available |
+| `/evaluations` is advertised but default `serve` runner is not implemented | P1 | Must-fix | `43w.2.1` | Default service wires real runner or returns explicit `501` and accurate capabilities |
+| Route-level async exceptions can escape JSON contract | P1 | Must-fix | `43w.2.2` | Shared route error boundary returns stable envelopes and no unhandled rejections |
+| Service close does not drain/cancel active jobs | P2 | Bundle | `43w.2.3` | Active job drain/cancel/recovery semantics are tested |
+| `pnpm pack --dry-run` parser can ignore actual pnpm output | P1 | Must-fix | `43w.3.1` | Parser handles pnpm path-only output and fails closed on empty parse |
+| CI package-boundary step does not run verifier | P1 | Must-fix | `43w.3.2` | CI validates actual pack output with `tools/check-package-boundary.js` |
+| Release security gate validates text, not completed evidence | P1 | Must-fix | `43w.3.3` | Gate verifies checked items and non-empty evidence files |
+| AUTO release gates are not enforced in CI | P1 | Must-fix | `43w.3.4` | CI runs gates or docs relabel them manual/local-only with rationale |
+| Release script validation checks names, not semantics | P3 | Bundle | `43w.3.5` | Script command semantics are validated by tests |
+| Package-boundary policy is hard-coded | P3 | Defer | `43w.3.6` | Policy becomes data-driven or manifest-derived |
+
+Final recommendation: Human review not required for triage. Proceed with P1
+items first, then P2 hardening, then P3 maintainability work.
+
 ## Execution Rules
 
 - Start each slice with `bd update <id> --claim`.
