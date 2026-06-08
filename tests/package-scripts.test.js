@@ -29,12 +29,12 @@ test('non-interactive quality gates invoke tools directly without nested pnpm ru
   const scripts = readScripts();
 
   assert.equal(scripts.build, 'tsc -p tsconfig.json');
-  assert.equal(scripts.typecheck, 'tsc -p tsconfig.json --noEmit');
+  assert.equal(scripts.typecheck, 'tsc -p tsconfig.json --noEmit --incremental false');
   assert.equal(scripts['coverage:check'], 'node tools/check-coverage.js');
   assert.equal(scripts['quality:coverage'], 'COVERAGE_MODE=ci node tools/check-coverage.js');
   assert.equal(
     scripts['quality:check'],
-    "tsc -p tsconfig.json --noEmit && node --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js') && node --test tests/mcp.test.js && COVERAGE_MODE=ci node tools/check-coverage.js"
+    "tsc -p tsconfig.json --noEmit --incremental false && node --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js') && node --test tests/mcp.test.js && COVERAGE_MODE=ci node tools/check-coverage.js"
   );
 });
 
