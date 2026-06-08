@@ -33,6 +33,7 @@ Use `pnpm install --frozen-lockfile` for clean-room installs and CI. Do not repl
 Write reports to an ignored output directory instead of the repository root:
 
 ```sh
+# docs-command-smoke: manual-gate network external audit
 pnpm start -- evaluate https://example.com --out .tmp/reports/example --format both --crawl-depth 1 --max-urls 5 --engine http --no-pdf
 ```
 
@@ -135,6 +136,7 @@ Release candidates should additionally run:
 ```sh
 pnpm pack --dry-run
 pnpm audit --prod
+# docs-command-smoke: manual-gate destructive release dry-run
 pnpm run release:dry
 ```
 

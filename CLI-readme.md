@@ -70,6 +70,7 @@ CRAWL_DEPTH=1 MAX_URLS=150 SKIP_PDF=1 CHECK_LINKS=1 CHECK_API=0
 ### 4.1 Single-domain audit
 
 ```bash
+# docs-command-smoke: manual-gate network external audit
 node dist/cli.js evaluate https://example.com \
   --out .tmp/reports/example.com \
   --format both \
@@ -82,6 +83,7 @@ node dist/cli.js evaluate https://example.com \
 With ontology disabled for compatibility:
 
 ```bash
+# docs-command-smoke: manual-gate network external audit
 STEALTH_LIGHTBEACON_ONTOLOGY=0 node dist/cli.js evaluate https://example.com \
   --out .tmp/reports/example.com \
   --format both --crawl-depth 1 --max-urls 150 --engine http --no-pdf
@@ -90,12 +92,14 @@ STEALTH_LIGHTBEACON_ONTOLOGY=0 node dist/cli.js evaluate https://example.com \
 ### 4.2 Multi-domain batch audit (helper script)
 
 ```bash
+# docs-command-smoke: manual-gate network external audit
 scripts/run-external-audits.sh prudential.com empower.com cigna.com fidelity.com
 ```
 
 Bounded variant:
 
 ```bash
+# docs-command-smoke: manual-gate network external audit
 CRAWL_DEPTH=1 MAX_URLS=250 scripts/run-external-audits.sh \
   prudential.com empower.com cigna.com fidelity.com
 ```
@@ -103,6 +107,7 @@ CRAWL_DEPTH=1 MAX_URLS=250 scripts/run-external-audits.sh \
 ### 4.3 Coverage summarization
 
 ```bash
+# docs-command-smoke: manual-gate network coverage summary
 node scripts/summarize-coverage.js .tmp/reports/external \
   prudential.com empower.com cigna.com fidelity.com
 ```
@@ -181,12 +186,16 @@ Observed result:
 ### 6.2 Successful external domain CLI runs
 
 ```bash
+# docs-command-smoke: manual-gate network external audit
 /usr/local/bin/lean-ctx -c 'STEALTH_LIGHTBEACON_ONTOLOGY=0 node dist/cli.js evaluate https://empower.com --out .tmp/reports/external/empower.com --format both --crawl-depth 1 --max-urls 150 --engine http --no-pdf'
 
+# docs-command-smoke: manual-gate network external audit
 /usr/local/bin/lean-ctx -c 'STEALTH_LIGHTBEACON_ONTOLOGY=0 node dist/cli.js evaluate https://cigna.com --out .tmp/reports/external/cigna.com --format both --crawl-depth 1 --max-urls 150 --engine http --no-pdf'
 
+# docs-command-smoke: manual-gate network external audit
 /usr/local/bin/lean-ctx -c 'STEALTH_LIGHTBEACON_ONTOLOGY=0 node dist/cli.js evaluate https://fidelity.com --out .tmp/reports/external/fidelity.com --format both --crawl-depth 1 --max-urls 150 --engine http --no-pdf'
 
+# docs-command-smoke: manual-gate network external audit
 /usr/local/bin/lean-ctx -c 'STEALTH_LIGHTBEACON_ONTOLOGY=0 node dist/cli.js evaluate https://prudential.com --out .tmp/reports/external/prudential.com --format both --crawl-depth 1 --max-urls 150 --engine http --no-pdf'
 ```
 
@@ -198,6 +207,7 @@ Generated outputs per domain:
 ### 6.3 Successful coverage summary command
 
 ```bash
+# docs-command-smoke: manual-gate network coverage summary
 /usr/local/bin/lean-ctx -c 'node scripts/summarize-coverage.js .tmp/reports/external prudential.com empower.com cigna.com fidelity.com'
 ```
 
