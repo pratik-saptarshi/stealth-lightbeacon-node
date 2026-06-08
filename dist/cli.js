@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
+exports.watchEvaluateCommand = watchEvaluateCommand;
 exports.searchSemanticCommand = searchSemanticCommand;
 exports.evaluateCommand = evaluateCommand;
 exports.reconCommand = reconCommand;
@@ -25,11 +26,14 @@ const ssrf_1 = require("./core/ssrf");
 const ontology_1 = require("./core/ontology");
 const browserPool_1 = require("./core/scraping/browserPool");
 const recon_1 = require("./core/recon");
+const watcher_1 = require("./core/watcher");
 const DEFAULT_OUTPUT_DIR = 'reports';
 const DEFAULT_SEARCH_LIMIT = 10;
 async function main() {
+    let activeWatchController;
     const cleanup = async () => {
         try {
+            await activeWatchController?.close();
             await browserPool_1.BrowserPool.getInstance().close();
         }
         catch {
@@ -62,8 +66,14 @@ async function main() {
         .option('--api-key <key>', 'Google PageSpeed Insights API key')
         .option('--persist', 'Persist audit and ontology state', true)
         .option('--no-persist', 'Skip audit and ontology persistence')
+        .option('--watch', 'Rerun the audit when source files change', false)
+        .option('--watch-debounce-ms <ms>', 'Watch debounce interval in milliseconds', '2000')
         .option('--no-pdf', 'Skip PDF output')
         .action(async (url, options) => {
+        if (options.watch) {
+            activeWatchController = await watchEvaluateCommand(url, options);
+            return;
+        }
         await evaluateCommand(url, options);
     });
     program
@@ -123,6 +133,55 @@ async function main() {
         });
     });
     await program.parseAsync(process.argv);
+}
+async function watchEvaluateCommand(rawUrl, rawOptions = {}) {
+    const evaluateFn = rawOptions.evaluateFn ?? evaluateCommand;
+    const closeResources = rawOptions.closeResources ?? (async () => {
+        await browserPool_1.BrowserPool.getInstance().close();
+    });
+    const createWatcher = rawOptions.createWatcher ?? ((workspaceRoot, debounceMs, options) => (new watcher_1.WorkspaceWatcher(workspaceRoot, debounceMs, options)));
+    const workspaceRoot = typeof rawOptions.workspaceRoot === 'string'
+        ? rawOptions.workspaceRoot
+        : process.cwd();
+    const debounceMs = parseWatchDebounceMs(rawOptions.watchDebounceMs);
+    let closed = false;
+    let running = Promise.resolve();
+    const runAudit = (changedFiles = []) => {
+        if (closed) {
+            return running;
+        }
+        running = running.then(() => evaluateFn(rawUrl, {
+            ...rawOptions,
+            watch: false,
+            watchChangedFiles: changedFiles
+        }));
+        return running;
+    };
+    const watcher = createWatcher(workspaceRoot, debounceMs, {
+        onChange: (changedFiles) => {
+            return runAudit(changedFiles);
+        }
+    });
+    await runAudit();
+    watcher.start();
+    return {
+        async close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            watcher.close();
+            await running;
+            await closeResources();
+        }
+    };
+}
+function parseWatchDebounceMs(rawDebounceMs) {
+    const debounceMs = Number(rawDebounceMs ?? 2000);
+    if (!Number.isInteger(debounceMs) || debounceMs < 0) {
+        return 2000;
+    }
+    return debounceMs;
 }
 async function searchSemanticCommand(rawQuery, rawOptions = {}) {
     const query = rawQuery.trim();

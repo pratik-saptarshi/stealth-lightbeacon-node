@@ -10,10 +10,94 @@ test('compiled cli module exports handlers without running the command', () => {
 
   assert.equal(typeof cli.main, 'function');
   assert.equal(typeof cli.evaluateCommand, 'function');
+  assert.equal(typeof cli.watchEvaluateCommand, 'function');
   assert.equal(typeof cli.searchSemanticCommand, 'function');
   assert.equal(typeof cli.reconCommand, 'function');
   assert.equal(typeof cli.applyReconRecommendation, 'function');
   assert.equal(typeof cli.checkBrokenLinks, 'function');
+});
+
+test('watchEvaluateCommand runs initial audit, reruns on changed source files, and closes resources', async () => {
+  const cli = require('../dist/cli.js');
+  const runs = [];
+  let started = false;
+  let closed = false;
+  let resourcesClosed = false;
+  let triggerChange;
+
+  const controller = await cli.watchEvaluateCommand('example.com', {
+    out: 'reports/watch',
+    format: 'json',
+    watchDebounceMs: '25',
+    evaluateFn: async (url, options) => {
+      runs.push({ url, options });
+    },
+    closeResources: async () => {
+      resourcesClosed = true;
+    },
+    createWatcher: (workspaceRoot, debounceMs, options) => {
+      assert.equal(workspaceRoot, repoRoot);
+      assert.equal(debounceMs, 25);
+      triggerChange = options.onChange;
+      return {
+        start() {
+          started = true;
+        },
+        close() {
+          closed = true;
+        }
+      };
+    }
+  });
+
+  assert.equal(started, true);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].url, 'example.com');
+  assert.equal(runs[0].options.watch, false);
+
+  await triggerChange(['src/core/watcher.ts']);
+
+  assert.equal(runs.length, 2);
+  assert.deepEqual(runs[1].options.watchChangedFiles, ['src/core/watcher.ts']);
+
+  await controller.close();
+
+  assert.equal(closed, true);
+  assert.equal(resourcesClosed, true);
+});
+
+test('watchEvaluateCommand close is idempotent and ignores post-close changes', async () => {
+  const cli = require('../dist/cli.js');
+  let closeCount = 0;
+  let resourceCloseCount = 0;
+  let triggerChange;
+  const runs = [];
+
+  const controller = await cli.watchEvaluateCommand('example.com', {
+    evaluateFn: async (url, options) => {
+      runs.push({ url, options });
+    },
+    closeResources: async () => {
+      resourceCloseCount += 1;
+    },
+    createWatcher: (_workspaceRoot, _debounceMs, options) => {
+      triggerChange = options.onChange;
+      return {
+        start() {},
+        close() {
+          closeCount += 1;
+        }
+      };
+    }
+  });
+
+  await controller.close();
+  await triggerChange(['src/cli.ts']);
+  await controller.close();
+
+  assert.equal(runs.length, 1);
+  assert.equal(closeCount, 1);
+  assert.equal(resourceCloseCount, 1);
 });
 
 test('searchSemanticCommand emits ranked hit json and closes the store', async () => {
@@ -154,6 +238,21 @@ test('compiled cli help exposes semantic search compatibility flag', () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /--search-semantic <query>/);
+});
+
+test('compiled evaluate help exposes watch mode options', () => {
+  const result = spawnSync(
+    process.execPath,
+    ['dist/cli.js', 'evaluate', '--help'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    }
+  );
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /--watch\b/);
+  assert.match(result.stdout, /--watch-debounce-ms <ms>/);
 });
 
 test('evaluateCommand fails fast when http2 is requested before audit side effects', async () => {
