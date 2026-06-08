@@ -53,7 +53,7 @@ jobs:
           AUDIT_CRAWL_DEPTH: ${{ inputs.crawl_depth || '1' }}
           AUDIT_MAX_URLS: ${{ inputs.max_urls || '5' }}
         run: |
-          pnpm exec stealth-lightbeacon evaluate "$AUDIT_TARGET_URL" \
+          node dist/cli.js evaluate "$AUDIT_TARGET_URL" \
             --crawl-depth "$AUDIT_CRAWL_DEPTH" \
             --max-urls "$AUDIT_MAX_URLS" \
             --format both \
