@@ -51,7 +51,12 @@ Any unchecked P0 item is a no-go.
 - [ ] `MANUAL` Secret scan covers repository and packed tarball output before publish.
 - [ ] `MANUAL` `.env.example` contains placeholders only.
 - [ ] `MANUAL` Release evidence redacts API keys, cookies, auth headers, private hostnames, customer data, and proprietary page contents.
-- [ ] `MANUAL` SBOM generated and attached if required by org policy.
+- [ ] `AUTO` `pnpm run release:security:check` verifies checklist/BOM coverage without network access.
+- [ ] `MANUAL` SBOM generated and attached if required by org policy; evidence path `.tmp/release-evidence/sbom.cyclonedx.json`.
+- [ ] `EVIDENCE` Secret scan output captured at `.tmp/release-evidence/secret-scan.txt`.
+- [ ] `EVIDENCE` Prod audit output captured at `.tmp/release-evidence/audit-prod.txt`.
+- [ ] `EVIDENCE` Pack dry-run output captured at `.tmp/release-evidence/pack-dry-run.txt`.
+- [ ] `MANUAL` Artifact hygiene review covers generated reports, caches, local config, packed tarball contents, and release evidence redaction.
 
 ## E) README and Support Documentation Gate
 
