@@ -81,6 +81,7 @@
   },
   "devDependencies": {
     "@release-it/conventional-changelog": "^11.0.0",
+    "@types/node": "^25.9.2",
     "release-it": "^20.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
