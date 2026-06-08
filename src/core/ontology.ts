@@ -9,6 +9,9 @@ import type { AuditIssue, AuditReport, DomainResult } from './types';
 import type { CrawledPage } from './crawler';
 import type { AuditPersistence } from './orchestrator';
 
+const SEARCH_MIN_SIMILARITY = 0.4;
+const SEARCH_BACKEND_LIMIT_MULTIPLIER = 4;
+
 const ontologyStoreOptionsSchema = z
   .object({
     collectionName: z.string().min(1).default('ontology_memory'),
@@ -241,21 +244,17 @@ export async function createOntologyStore(options: OntologyStoreOptions = {}): P
       }
 
       try {
+        const queryVector = makeVector(query, parsed.vectorDimensions);
         const result = await runtime.lance.search({
-          limit,
+          limit: Math.min(Math.max(limit * SEARCH_BACKEND_LIMIT_MULTIPLIER, limit), 100),
           table: parsed.collectionName,
-          vector: makeVector(query, parsed.vectorDimensions)
+          vector: queryVector
         });
-        return result.rows.map(row => ({
-          id: String(row.id),
-          kind: String(row.kind),
-          label: String(row.label),
-          metadata: isRecord(row.metadata) ? row.metadata : undefined,
-          runId: String(row.runId),
-          score: typeof row.score === 'number' ? row.score : undefined,
-          text: String(row.text),
-          url: typeof row.url === 'string' ? row.url : undefined
-        }));
+        return result.rows
+          .map(row => toSearchResult(row, queryVector))
+          .filter((row): row is OntologySearchResult => row !== undefined)
+          .sort(compareSearchResults)
+          .slice(0, limit);
       } catch {
         return [];
       }
@@ -514,6 +513,55 @@ function makeVector(text: string, dimensions: number): number[] {
   }
 
   return vector.map(value => Number((value / magnitude).toFixed(6)));
+}
+
+function toSearchResult(row: Record<string, unknown>, queryVector: number[]): OntologySearchResult | undefined {
+  const rowVector = Array.isArray(row.vector) ? row.vector.filter(value => typeof value === 'number') : [];
+  const similarity = cosineSimilarity(queryVector, rowVector);
+  if (similarity < SEARCH_MIN_SIMILARITY) {
+    return undefined;
+  }
+
+  return {
+    id: String(row.id),
+    kind: String(row.kind),
+    label: String(row.label),
+    metadata: isRecord(row.metadata) ? row.metadata : undefined,
+    runId: String(row.runId),
+    score: Number(similarity.toFixed(6)),
+    text: String(row.text),
+    url: typeof row.url === 'string' ? row.url : undefined
+  };
+}
+
+function compareSearchResults(left: OntologySearchResult, right: OntologySearchResult): number {
+  const scoreDelta = (right.score ?? 0) - (left.score ?? 0);
+  if (Math.abs(scoreDelta) > 0.000001) {
+    return scoreDelta;
+  }
+
+  return left.label.localeCompare(right.label) || left.id.localeCompare(right.id);
+}
+
+function cosineSimilarity(left: number[], right: number[]): number {
+  const size = Math.max(left.length, right.length);
+  let dot = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let index = 0; index < size; index += 1) {
+    const leftValue = left[index] ?? 0;
+    const rightValue = right[index] ?? 0;
+    dot += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+
+  if (leftMagnitude === 0 || rightMagnitude === 0) {
+    return 0;
+  }
+
+  return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
 function hashToken(token: string): number {

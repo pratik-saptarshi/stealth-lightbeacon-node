@@ -26,8 +26,9 @@ Module._load = function patchedLoad(request, parent, isMain) {
 };
 
 async function loadModule(relativePath) {
-  const resolvedPath = relativePath.replace(/\.ts$/, '.js');
-  const fullPath = path.join(__dirname, '..', 'dist', resolvedPath);
+  const fullPath = runOntologyTestsLocally
+    ? path.join(__dirname, '..', 'src', relativePath)
+    : path.join(__dirname, '..', 'dist', relativePath.replace(/\.ts$/, '.js'));
   try {
     return require(fullPath);
   } catch (error) {
@@ -237,6 +238,73 @@ ontologyTest('ontology store semantic search returns the matching finding memory
   assert.equal(hits[0].label, 'R-SEO-NEEDLE');
   assert.equal(hits[0].runId, runId);
   assert.match(hits[0].text, /spectralneedle/i);
+
+  await store.close();
+});
+
+ontologyTest('ontology store semantic search ranks deterministically and suppresses no-hit queries', async () => {
+  const mod = await loadModule(path.join('core', 'ontology.ts'));
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stealth-lightbeacon-ontology-ranking-'));
+  const store = await mod.createOntologyStore({ rootDir, vectorDimensions: 64 });
+  const runId = 'run-semantic-ranking';
+  const page = samplePage({
+    url: 'https://example.com/articles/search-ranking',
+    html:
+      '<html><head><title>Search Ranking</title></head><body><h1>Search Ranking</h1><p>Alpha body text.</p></body></html>'
+  });
+  const result = sampleResult({
+    issues: [
+      {
+        id: 'R-SEO-BRAVO',
+        severity: 'warning',
+        message: 'bravoneedle parity regression detected',
+        location: 'Body',
+        remedy: 'Fix the bravoneedle issue.'
+      },
+      {
+        id: 'R-SEO-ALPHA',
+        severity: 'warning',
+        message: 'bravoneedle parity regression detected',
+        location: 'Body',
+        remedy: 'Fix the bravoneedle issue.'
+      },
+      {
+        id: 'R-SEO-CHARLIE',
+        severity: 'warning',
+        message: 'charlieneedle alternate regression detected',
+        location: 'Body',
+        remedy: 'Fix the charlieneedle issue.'
+      }
+    ]
+  });
+
+  await store.beginRun({
+    runId,
+    startedAt: '2026-05-23T10:10:00.000Z',
+    targetUrl: 'https://example.com/',
+    options: { crawlDepth: 1, maxUrls: 5 }
+  });
+  await store.recordPage({ page, runId });
+  await store.recordFinding({ page, result, runId });
+  await store.finishRun({
+    pages: [page],
+    report: {
+      targetUrl: 'https://example.com/',
+      crawledPagesCount: 1,
+      domains: [result],
+      brokenPages: {}
+    },
+    runId,
+    finishedAt: '2026-05-23T10:10:01.000Z'
+  });
+
+  const hits = await store.search('bravoneedle parity regression', 5);
+  assert.deepEqual(
+    hits.map((hit) => hit.label),
+    ['R-SEO-ALPHA', 'R-SEO-BRAVO']
+  );
+  assert.ok(hits.every((hit) => typeof hit.score === 'number'));
+  assert.deepEqual(await store.search('zzzz unmatched abyssal phrase', 5), []);
 
   await store.close();
 });
