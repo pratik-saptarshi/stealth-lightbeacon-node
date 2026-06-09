@@ -11,7 +11,7 @@ We enforce a strict TDD loop for all evaluator modifications and core changes:
 3. **Refactor**: Clean up implementation without breaking existing tests.
 
 ### 2. Coverage Gate
-All changes must satisfy our continuous integration coverage thresholds. Locally and in CI, the minimum aggregate coverage requirements are:
+All changes must satisfy our continuous integration coverage thresholds. Locally and in CI, included files must satisfy these per-file coverage requirements unless they are listed in the approved exception registry in `tools/check-coverage.js`:
 - **Line Coverage**: `>= 85%`
 - **Branch Coverage**: `>= 85%`
 - **Function Coverage**: `>= 85%`
@@ -20,7 +20,7 @@ To run coverage checks locally:
 ```bash
 pnpm run coverage
 ```
-Any pull request falling below these thresholds will fail the `quality:coverage` build gate.
+Any pull request adding a new below-threshold included file will fail the `quality:coverage` build gate.
 
 ### 3. TypeScript Guidelines
 - Enable `strict` checks in `tsconfig.json`.

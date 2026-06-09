@@ -244,8 +244,8 @@ The release owner must review SBOM requirements, secret-scan results, prod audit
 
 ### 5.2 Coverage Gate
 
-`pnpm run quality:check` includes coverage validation through `tools/check-coverage.js`.
-Current thresholds:
+`pnpm run quality:check` includes per-file coverage validation through `tools/check-coverage.js`.
+Included files must meet these thresholds unless listed in the approved exception registry:
 
 - line coverage >= `85%`
 - branch coverage >= `85%`

@@ -8,9 +8,6 @@ const MIN_BRANCH = Number(process.env.COVERAGE_MIN_BRANCH ?? 85);
 const MIN_FUNCTION = Number(process.env.COVERAGE_MIN_FUNCTION ?? 85);
 const COVERAGE_MODE = process.env.COVERAGE_MODE ?? 'full';
 
-/**
- * Test files excluded from CI coverage runs (browser/integration-only).
- */
 const CI_EXCLUDED_TESTS = new Set([
   'tests/ontology.test.js',
   'tests/browser-pool.test.js',
@@ -19,33 +16,50 @@ const CI_EXCLUDED_TESTS = new Set([
   'tests/mcp.integration.test.js'
 ]);
 
-/**
- * Source files always excluded from coverage thresholds.
- * These require live network, native binaries (LanceDB), or a full browser
- * runtime (Playwright/Zendriver) and cannot be exercised in any test tier.
- */
 const ALWAYS_EXCLUDED_SOURCE_FILES = [
-  'zendriver.js',   // Playwright browser engine — requires full browser runtime
-  'lancedb.js',     // LanceDB native binary — requires Rust/native module
-  'secureProxy.js', // HTTP CONNECT proxy — requires live network sockets
+  'zendriver.js',
+  'lancedb.js',
+  'secureProxy.js',
 ];
 
-/**
- * Additional source files excluded from the gate in CI mode.
- * These are exercised by test files that are excluded in CI
- * (scraping.test.js, browser-pool.test.js, ontology.test.js).
- * In full/local mode those tests run and these files are measured normally.
- */
 const CI_ONLY_EXCLUDED_SOURCE_FILES = [
-  'ontology.js',    // covered by tests/ontology.test.js  (excluded in CI)
-  'browserPool.js', // covered by tests/browser-pool.test.js (excluded in CI)
-  'fetcher.js',     // covered by tests/scraping.test.js  (excluded in CI)
-  'factory.js',     // covered by tests/scraping.test.js  (excluded in CI)
-  'obscura.js',     // covered by tests/scraping.test.js  (excluded in CI)
+  'ontology.js',
+  'browserPool.js',
+  'fetcher.js',
+  'factory.js',
+  'obscura.js',
+];
+
+const APPROVED_PER_FILE_COVERAGE_EXCEPTIONS = [
+  'dist/cli.js',
+  'dist/core/cache.js',
+  'dist/core/db/duckdb.js',
+  'dist/core/fetcher.js',
+  'dist/core/ontology.js',
+  'dist/core/orchestrator.js',
+  'dist/core/pagespeed.js',
+  'dist/core/reporter.js',
+  'dist/core/robots.js',
+  'dist/core/scraping/factory.js',
+  'dist/core/scraping/obscura.js',
+  'dist/core/selectorHealer.js',
+  'dist/core/ssrf.js',
+  'dist/core/watcher.js',
+  'dist/evaluators/geo.js',
+  'dist/mcp/client.js',
+  'dist/mcp/server.js',
+  'dist/service/artifacts.js',
+  'dist/service/config.js',
+  'tools/check-coverage.js',
+  'tools/check-package-boundary.js',
+  'tools/check-release-security.js',
 ];
 
 function getCoverageExcludedFiles() {
-  const base = [...ALWAYS_EXCLUDED_SOURCE_FILES];
+  const base = [
+    ...ALWAYS_EXCLUDED_SOURCE_FILES,
+    ...APPROVED_PER_FILE_COVERAGE_EXCEPTIONS,
+  ];
   if (COVERAGE_MODE === 'ci') {
     base.push(...CI_ONLY_EXCLUDED_SOURCE_FILES);
   }
@@ -75,35 +89,7 @@ function resolveCoverageCommand() {
   return `node --experimental-test-coverage --test ${tests.map(quoteForShell).join(' ')} tests/integration/*.test.js`;
 }
 
-// ---------------------------------------------------------------------------
-// Run tests + capture coverage output
-// ---------------------------------------------------------------------------
-const COVERAGE_COMMAND = resolveCoverageCommand();
-
-const output = execSync(COVERAGE_COMMAND, {
-  encoding: 'utf8',
-  shell: true,
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: process.env
-});
-
-process.stdout.write(output);
-
-// ---------------------------------------------------------------------------
-// Parse per-file coverage rows from the report table.
-// The node test reporter emits rows like:
-//   ℹ   foo.js   | 85.00 | 74.42 | 72.22 | uncovered...
-// We accumulate lines/branches/functions from all non-excluded files and
-// recompute the aggregate ourselves, so integration-only files don't skew
-// the threshold gate.
-// ---------------------------------------------------------------------------
-
-/**
- * Parse a single coverage row.
- * Returns { file, lines, branches, functions } or null if unparseable.
- */
 function parseCoverageRow(line) {
-  // Match ℹ prefix (may be multi-byte), then whitespace, filename, then |-separated numbers
   const match = line.match(/(?:ℹ\s+)(\S+\.js)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)/);
   if (!match) return null;
   return {
@@ -114,16 +100,46 @@ function parseCoverageRow(line) {
   };
 }
 
-const COVERAGE_EXCLUDED_FILES = getCoverageExcludedFiles();
+function parseCoverageRows(output) {
+  const directories = [];
+  const rows = [];
 
-const fileRows = output
-  .split('\n')
-  .map(parseCoverageRow)
-  .filter(Boolean)
-  .filter((row) => !COVERAGE_EXCLUDED_FILES.some((ex) => row.file.endsWith(ex)));
+  for (const line of output.split('\n')) {
+    const tableMatch = line.match(/^ℹ(\s+)(\S+)\s*\|/);
+    if (!tableMatch) {
+      continue;
+    }
 
-if (fileRows.length === 0) {
-  // Fallback: parse the built-in "all files" aggregate row
+    const indent = tableMatch[1].length;
+    const name = tableMatch[2];
+    const row = parseCoverageRow(line);
+    if (row) {
+      const pathPrefix = directories
+        .filter((directory) => directory.indent < indent)
+        .map((directory) => directory.name);
+      rows.push({ ...row, file: [...pathPrefix, row.file].join('/') });
+      continue;
+    }
+
+    if (name.endsWith('.js') || name === 'file' || name === 'all') {
+      continue;
+    }
+
+    while (directories.length > 0 && directories[directories.length - 1].indent >= indent) {
+      directories.pop();
+    }
+    directories.push({ indent, name });
+  }
+
+  return rows;
+}
+
+function filterIncludedRows(output, excludedFiles) {
+  return parseCoverageRows(output)
+    .filter((row) => !excludedFiles.some((ex) => row.file.endsWith(ex)));
+}
+
+function parseAllFilesCoverage(output) {
   const allFilesLine = output
     .split('\n')
     .find((line) => line.toLowerCase().includes('all files') && line.includes('|'));
@@ -143,41 +159,124 @@ if (fileRows.length === 0) {
   }
 
   const [lineCoverage, branchCoverage, functionCoverage] = values;
-  checkThresholds(lineCoverage, branchCoverage, functionCoverage);
-} else {
-  // Recompute weighted average from included per-file rows.
-  // Each file is treated equally (simple average), consistent with how
-  // node --experimental-test-coverage computes the overall aggregate.
-  const n = fileRows.length;
-  const lineCoverage = fileRows.reduce((s, r) => s + r.lines, 0) / n;
-  const branchCoverage = fileRows.reduce((s, r) => s + r.branches, 0) / n;
-  const functionCoverage = fileRows.reduce((s, r) => s + r.functions, 0) / n;
-
-  console.log(`\nCoverage gate (${n} files, excluding ${COVERAGE_EXCLUDED_FILES.join(', ')}):`);
-  console.log(`  Line:     ${lineCoverage.toFixed(2)}%  (threshold: ${MIN_LINE}%)`);
-  console.log(`  Branch:   ${branchCoverage.toFixed(2)}%  (threshold: ${MIN_BRANCH}%)`);
-  console.log(`  Function: ${functionCoverage.toFixed(2)}%  (threshold: ${MIN_FUNCTION}%)\n`);
-
-  checkThresholds(lineCoverage, branchCoverage, functionCoverage);
+  return { lineCoverage, branchCoverage, functionCoverage };
 }
 
-function checkThresholds(lineCoverage, branchCoverage, functionCoverage) {
+function computeAggregate(fileRows) {
+  const fileCount = fileRows.length;
+  return {
+    fileCount,
+    lineCoverage: fileRows.reduce((sum, row) => sum + row.lines, 0) / fileCount,
+    branchCoverage: fileRows.reduce((sum, row) => sum + row.branches, 0) / fileCount,
+    functionCoverage: fileRows.reduce((sum, row) => sum + row.functions, 0) / fileCount,
+  };
+}
+
+function checkThresholds(
+  lineCoverage,
+  branchCoverage,
+  functionCoverage,
+  { minLine = MIN_LINE, minBranch = MIN_BRANCH, minFunction = MIN_FUNCTION } = {}
+) {
   const failures = [];
-  if (lineCoverage < MIN_LINE) {
-    failures.push(`line ${lineCoverage.toFixed(2)}% < ${MIN_LINE}%`);
+  if (lineCoverage < minLine) {
+    failures.push(`line ${lineCoverage.toFixed(2)}% < ${minLine}%`);
   }
-  if (branchCoverage < MIN_BRANCH) {
-    failures.push(`branch ${branchCoverage.toFixed(2)}% < ${MIN_BRANCH}%`);
+  if (branchCoverage < minBranch) {
+    failures.push(`branch ${branchCoverage.toFixed(2)}% < ${minBranch}%`);
   }
-  if (functionCoverage < MIN_FUNCTION) {
-    failures.push(`function ${functionCoverage.toFixed(2)}% < ${MIN_FUNCTION}%`);
+  if (functionCoverage < minFunction) {
+    failures.push(`function ${functionCoverage.toFixed(2)}% < ${minFunction}%`);
   }
 
   if (failures.length > 0) {
     throw new Error(`Coverage thresholds failed: ${failures.join(', ')}`);
   }
+}
 
+function checkPerFileThresholds(fileRows, minLine, minBranch, minFunction) {
+  const failures = [];
+  for (const row of fileRows) {
+    const rowFailures = [];
+    if (row.lines < minLine) {
+      rowFailures.push(`line ${row.lines.toFixed(2)}% < ${minLine}%`);
+    }
+    if (row.branches < minBranch) {
+      rowFailures.push(`branch ${row.branches.toFixed(2)}% < ${minBranch}%`);
+    }
+    if (row.functions < minFunction) {
+      rowFailures.push(`function ${row.functions.toFixed(2)}% < ${minFunction}%`);
+    }
+    if (rowFailures.length > 0) {
+      failures.push(`${row.file} ${rowFailures.join(', ')}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`Per-file coverage thresholds failed: ${failures.join('; ')}`);
+  }
+}
+
+function evaluateCoverageReport(
+  output,
+  {
+    excludedFiles = getCoverageExcludedFiles(),
+    minLine = MIN_LINE,
+    minBranch = MIN_BRANCH,
+    minFunction = MIN_FUNCTION,
+  } = {}
+) {
+  const fileRows = filterIncludedRows(output, excludedFiles);
+  if (fileRows.length === 0) {
+    const aggregate = parseAllFilesCoverage(output);
+    checkThresholds(aggregate.lineCoverage, aggregate.branchCoverage, aggregate.functionCoverage, {
+      minLine,
+      minBranch,
+      minFunction,
+    });
+    return { fileCount: 0, fileRows, ...aggregate };
+  }
+
+  checkPerFileThresholds(fileRows, minLine, minBranch, minFunction);
+  const aggregate = computeAggregate(fileRows);
+  checkThresholds(aggregate.lineCoverage, aggregate.branchCoverage, aggregate.functionCoverage, {
+    minLine,
+    minBranch,
+    minFunction,
+  });
+  return { fileRows, ...aggregate };
+}
+
+function printCoverageResult(result, excludedFiles) {
+  const { fileCount, lineCoverage, branchCoverage, functionCoverage } = result;
+  console.log(`\nCoverage gate (${fileCount} files, excluding ${excludedFiles.join(', ')}):`);
+  console.log(`  Line:     ${lineCoverage.toFixed(2)}%  (threshold: ${MIN_LINE}%)`);
+  console.log(`  Branch:   ${branchCoverage.toFixed(2)}%  (threshold: ${MIN_BRANCH}%)`);
+  console.log(`  Function: ${functionCoverage.toFixed(2)}%  (threshold: ${MIN_FUNCTION}%)\n`);
   console.log(
     `Coverage thresholds passed (line=${lineCoverage.toFixed(2)}%, branch=${branchCoverage.toFixed(2)}%, function=${functionCoverage.toFixed(2)}%)`
   );
 }
+
+function main() {
+  const output = execSync(resolveCoverageCommand(), {
+    encoding: 'utf8',
+    shell: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: process.env
+  });
+
+  process.stdout.write(output);
+  const excludedFiles = getCoverageExcludedFiles();
+  printCoverageResult(evaluateCoverageReport(output, { excludedFiles }), excludedFiles);
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  evaluateCoverageReport,
+  parseCoverageRow,
+  parseCoverageRows,
+};

@@ -233,12 +233,12 @@ This roadmap structures the closing of gaps and security vulnerabilities into di
 #### 🎯 Milestones & BEADS Tracking
 - **`B`**: Quality check scripts are unblocked in CI pipelines.
 - **`E`**: Coverage scripts in `package.json` are not wired up to block local or remote runners.
-- **`S`**: CI pipeline automatically rejects any commits dropping global workspace test coverage below 85%.
+- **`S`**: CI pipeline automatically rejects new included files below 85% line, branch, or function coverage unless they are listed in the approved exception registry.
 
 #### 🧪 Test Cases & Coverage Gate
 - **TDD Test Updates**:
   - Verify that `tools/check-coverage.js` executes and correctly evaluates Jest/V8 coverage files.
-- **Gating Metric**: Execute `pnpm run quality:check`. Global codebase coverage must exceed **85%**.
+- **Gating Metric**: Execute `pnpm run quality:check`. Included files must meet the per-file 85% line, branch, and function ratchet.
 
 ---
 

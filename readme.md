@@ -142,7 +142,7 @@ pnpm run release:dry
 
 Before publishing, verify package metadata, tarball contents, secret-scan results, security alerts, README/SECURITY guidance, and GitHub Actions status against `docs/publishing-roadmap-checklist.md`.
 
-Coverage thresholds are enforced by `pnpm run coverage:check`:
+Coverage thresholds are enforced per included file by `pnpm run coverage:check`; approved exceptions are listed in `tools/check-coverage.js`:
 - line coverage >= `85%`
 - branch coverage >= `85%`
 - function coverage >= `85%`
