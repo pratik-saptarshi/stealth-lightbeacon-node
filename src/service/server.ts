@@ -3,6 +3,7 @@ import * as https from 'node:https';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { listDefaultEvaluatorPlugins } from '../core/defaultEvaluators';
+import { SUPPORTED_AUDIT_ENGINES, SUPPORTED_REPORT_FORMATS } from '../core/config';
 import { ArtifactStore } from './artifacts';
 import { loadServiceConfig, type ServiceConfig, type ServiceConfigInput } from './config';
 import { EvaluationJobStore } from './jobs';
@@ -17,8 +18,6 @@ export interface StartedService {
   close(): Promise<void>;
 }
 
-const ENGINES = ['http', 'rendered', 'fast', 'stealth'] as const;
-const FORMATS = ['json', 'html', 'both', 'llm', 'geo-xml'] as const;
 const ENDPOINTS = [
   '/health',
   '/capabilities',
@@ -100,8 +99,8 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
     if (request.method === 'GET' && path === '/capabilities') {
       writeJson(response, 200, {
         ok: true,
-        engines: [...ENGINES],
-        formats: [...FORMATS],
+        engines: [...SUPPORTED_AUDIT_ENGINES],
+        formats: [...SUPPORTED_REPORT_FORMATS],
         evaluators: listDefaultEvaluatorPlugins().map((plugin) => plugin.id),
         endpoints: [...ENDPOINTS],
         security: {

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
+const packageJson = require('../package.json');
 
 const repoRoot = path.join(__dirname, '..');
 
@@ -238,6 +239,17 @@ test('compiled cli help exposes semantic search compatibility flag', () => {
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /--search-semantic <query>/);
+});
+
+test('compiled cli version matches package metadata', () => {
+  const result = spawnSync(
+    process.execPath,
+    ['dist/cli.js', '--version'],
+    { encoding: 'utf8' }
+  );
+
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.trim(), packageJson.version);
 });
 
 test('compiled evaluate help exposes watch mode options', () => {

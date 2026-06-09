@@ -39,12 +39,11 @@ const https = __importStar(require("node:https"));
 const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
 const defaultEvaluators_1 = require("../core/defaultEvaluators");
+const config_1 = require("../core/config");
 const artifacts_1 = require("./artifacts");
-const config_1 = require("./config");
+const config_2 = require("./config");
 const jobs_1 = require("./jobs");
 const reconRunner_1 = require("./reconRunner");
-const ENGINES = ['http', 'rendered', 'fast', 'stealth'];
-const FORMATS = ['json', 'html', 'both', 'llm', 'geo-xml'];
 const ENDPOINTS = [
     '/health',
     '/capabilities',
@@ -56,7 +55,7 @@ const ENDPOINTS = [
     '/recon'
 ];
 async function startService(input = {}) {
-    const config = (0, config_1.loadServiceConfig)(input);
+    const config = (0, config_2.loadServiceConfig)(input);
     assertSafeBindConfig(config);
     const startedAt = config.clock();
     const canEvaluate = Boolean(config.auditRunner);
@@ -118,8 +117,8 @@ async function startService(input = {}) {
         if (request.method === 'GET' && path === '/capabilities') {
             writeJson(response, 200, {
                 ok: true,
-                engines: [...ENGINES],
-                formats: [...FORMATS],
+                engines: [...config_1.SUPPORTED_AUDIT_ENGINES],
+                formats: [...config_1.SUPPORTED_REPORT_FORMATS],
                 evaluators: (0, defaultEvaluators_1.listDefaultEvaluatorPlugins)().map((plugin) => plugin.id),
                 endpoints: [...ENDPOINTS],
                 security: {

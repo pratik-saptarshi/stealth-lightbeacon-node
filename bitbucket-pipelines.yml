@@ -1,4 +1,4 @@
-image: node:20
+image: node:24
 
 pipelines:
   custom:
@@ -8,6 +8,8 @@ pipelines:
           caches:
             - node
           script:
+            - corepack enable
+            - corepack prepare pnpm@11.4.0 --activate
             - pnpm install --frozen-lockfile
             - pnpm run build
             - pnpm exec stealth-lightbeacon audit "https://example.com" --depth 1 --max-urls 5 --format both --output-dir ./audit-results
@@ -19,6 +21,8 @@ pipelines:
         caches:
           - node
         script:
+          - corepack enable
+          - corepack prepare pnpm@11.4.0 --activate
           - pnpm install --frozen-lockfile
           - pnpm run build
           - pnpm run quality:check
