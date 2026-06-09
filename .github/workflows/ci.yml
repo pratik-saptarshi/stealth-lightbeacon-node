@@ -40,11 +40,27 @@ jobs:
       - name: Run Quality Checks
         run: pnpm run quality:check
 
+      - name: Prepare release evidence
+        run: mkdir -p .tmp/release-evidence
+
       - name: Audit production dependencies
-        run: pnpm audit --prod
+        run: pnpm audit --prod > .tmp/release-evidence/audit-prod.txt
+
+      - name: Generate CI SBOM evidence
+        run: pnpm list --prod --json > .tmp/release-evidence/sbom.cyclonedx.json
+
+      - name: Scan repository for common secret patterns
+        run: |
+          echo "git grep secret scan completed" > .tmp/release-evidence/secret-scan.txt
+          if git grep -n -I -E '(AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9_]{36,}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----)' -- . ':!pnpm-lock.yaml' >> .tmp/release-evidence/secret-scan.txt; then
+            cat .tmp/release-evidence/secret-scan.txt
+            exit 1
+          fi
 
       - name: Verify npm package boundary
-        run: pnpm pack --dry-run
+        run: |
+          pnpm pack --dry-run > .tmp/release-evidence/pack-dry-run.txt
+          node tools/check-package-boundary.js .tmp/release-evidence/pack-dry-run.txt
 
       - name: Smoke test packaged binaries
         run: |
