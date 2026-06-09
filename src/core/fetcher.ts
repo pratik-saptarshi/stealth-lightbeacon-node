@@ -1,4 +1,4 @@
-import * as cheerio from 'cheerio';
+import cheerio = require('cheerio');
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as dns from 'node:dns';

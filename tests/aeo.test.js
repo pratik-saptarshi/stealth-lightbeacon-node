@@ -86,6 +86,33 @@ test('AeoEvaluator: microdata structured data support', async () => {
   assert.equal(result.issues.length, 0, 'Should have no issues when microdata AEO conditions are met');
 });
 
+test('AeoEvaluator: ignores empty and malformed JSON-LD while detecting later HowTo schema', async () => {
+  const mod = await loadModule(path.join('evaluators', 'aeo.js'));
+  const evaluator = new mod.AeoEvaluator();
+
+  const result = await evaluator.evaluate({
+    url: 'https://example.com/aeo',
+    html: `
+      <html>
+        <head>
+          <script type="application/ld+json"></script>
+          <script type="application/ld+json">{bad json</script>
+          <script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo"}</script>
+        </head>
+        <body>
+          <h3>What makes the deployment safe?</h3>
+          <p>The deployment is safe because the release process checks tests, coverage, package contents, and security evidence before publishing.</p>
+        </body>
+      </html>
+    `,
+    headers: {}
+  });
+
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.metadata.questionHeadingCount, 1);
+  assert.equal(result.metadata.conciseParagraphCount, 1);
+});
+
 test('Reporter: formats LLM and GEO-XML output correctly', async () => {
   const mod = await loadModule(path.join('core', 'reporter.js'));
   const tempDir = path.join(__dirname, '..', '.cache', 'test-reporter');
@@ -135,4 +162,3 @@ test('Reporter: formats LLM and GEO-XML output correctly', async () => {
   // Clean up
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
-

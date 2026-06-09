@@ -344,3 +344,13 @@ test('recon route errors return stable json envelopes without unhandled rejectio
     await service.close();
   }
 });
+
+test('default recon runner fails closed to stealth recommendations for blocked targets', async () => {
+  const { defaultReconRunner } = require('../dist/service/reconRunner.js');
+
+  const recommendation = await defaultReconRunner({ targetUrl: 'http://127.0.0.1/admin' });
+
+  assert.deepEqual(recommendation.detectedProtections, ['Unknown (Blocked or Offline)']);
+  assert.equal(recommendation.recommendedEngine, 'stealth');
+  assert.equal(recommendation.recommendedThrottleMs, 2000);
+});

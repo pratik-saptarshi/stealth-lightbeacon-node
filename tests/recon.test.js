@@ -54,3 +54,44 @@ test('PreAuditRecon: detects no protections and Next.js footprint', async () => 
   assert.equal(result.recommendedThrottleMs, 0);
 });
 
+test('PreAuditRecon: detects Akamai, DataDome, CAPTCHA, and fast path branches', async () => {
+  const mod = await loadModule(path.join('core', 'recon.js'));
+  const ssrfMod = await loadModule(path.join('core', 'ssrf.js'));
+  const guard = new ssrfMod.SSRFGuard({ allowPrivate: true });
+  const recon = new mod.PreAuditRecon(guard, async () => ({
+    status: 200,
+    headers: {
+      server: 'AkamaiGHost',
+      'x-akamai-transformed': '9',
+      'set-cookie': 'datadome=token'
+    },
+    text: async () => '<html><script src="https://js.datadome.co/tags.js"></script><script src="https://www.google.com/recaptcha/api.js"></script></html>'
+  }));
+
+  const protectedResult = await recon.analyze('http://127.0.0.1/');
+  assert.deepEqual(protectedResult.detectedProtections, ['Akamai', 'DataDome', 'CAPTCHA']);
+  assert.equal(protectedResult.recommendedEngine, 'stealth');
+
+  const fastRecon = new mod.PreAuditRecon(guard, async () => ({
+    status: 200,
+    headers: { server: 'nginx' },
+    text: async () => '<html><body><p>static content</p></body></html>'
+  }));
+  const fastResult = await fastRecon.analyze('http://127.0.0.1/');
+  assert.deepEqual(fastResult.detectedProtections, []);
+  assert.equal(fastResult.recommendedEngine, 'http');
+});
+
+test('PreAuditRecon: fails closed to stealth recommendation when fetch fails', async () => {
+  const mod = await loadModule(path.join('core', 'recon.js'));
+  const ssrfMod = await loadModule(path.join('core', 'ssrf.js'));
+  const guard = new ssrfMod.SSRFGuard({ allowPrivate: true });
+  const recon = new mod.PreAuditRecon(guard, async () => {
+    throw new Error('network blocked');
+  });
+
+  const result = await recon.analyze('http://127.0.0.1/');
+  assert.deepEqual(result.detectedProtections, ['Unknown (Blocked or Offline)']);
+  assert.equal(result.recommendedEngine, 'stealth');
+  assert.equal(result.recommendedThrottleMs, 2000);
+});

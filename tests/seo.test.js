@@ -117,3 +117,66 @@ test('SeoEvaluator: flags robots disallow, path blocking, missing sitemap, canon
   assert.ok(lenIssueShort, 'Expected R-SEO-DESC-LEN issue for short description');
   assert.equal(lenIssueShort.severity, 'warning');
 });
+
+test('SeoEvaluator covers canonical mismatch and JSON-LD edge cases', async () => {
+  const mod = await loadModule(path.join('evaluators', 'seo.js'));
+  const evaluator = new mod.SeoEvaluator();
+  const longDescription = 'A valid description '.repeat(8);
+
+  const result = await evaluator.evaluate({
+    url: 'https://example.com/page',
+    html: `
+      <html>
+        <head>
+          <title>Valid page title</title>
+          <meta name="description" content="${longDescription}">
+          <meta name="robots" content="noindex,follow">
+          <meta property="og:title" content="Social title">
+          <link rel="canonical" href="https://example.com/other">
+          <script type="application/ld+json"></script>
+          <script type="application/ld+json">{"@context":"https://example.org","@type":"WebPage"}</script>
+          <script type="application/ld+json">{"@context":"https://schema.org"}</script>
+          <script type="application/ld+json">{bad json</script>
+          <script type="application/ld+json">[{"@context":"https://schema.org","@type":"Article"}]</script>
+        </head>
+        <body><h1>Heading 1</h1><h1>Heading 2</h1></body>
+      </html>
+    `,
+    headers: {},
+    robotsContent: 'User-agent: *\nSitemap: https://example.com/sitemap.xml'
+  });
+
+  const ids = result.issues.map((issue) => issue.id);
+  assert.ok(ids.includes('R-SEO-CAN-MISMATCH'));
+  assert.ok(ids.includes('R-SEO-ROBOTS-NOINDEX'));
+  assert.ok(ids.includes('R-SEO-H1-MULTI'));
+  assert.ok(ids.some((id) => id.startsWith('R-SEO-LD-EMPTY')));
+  assert.ok(ids.some((id) => id.startsWith('R-SEO-LD-CTX')));
+  assert.ok(ids.some((id) => id.startsWith('R-SEO-LD-TYPE')));
+  assert.ok(ids.some((id) => id.startsWith('R-SEO-LD-PARSE')));
+});
+
+test('SeoEvaluator passes clean metadata with schema.org subdomain context', async () => {
+  const mod = await loadModule(path.join('evaluators', 'seo.js'));
+  const evaluator = new mod.SeoEvaluator();
+  const result = await evaluator.evaluate({
+    url: 'https://example.com/page',
+    html: `
+      <html>
+        <head>
+          <title>Valid page title</title>
+          <meta name="description" content="${'A valid description '.repeat(8)}">
+          <meta property="og:title" content="Social title">
+          <link rel="canonical" href="https://example.com/page">
+          <script type="application/ld+json">{"@context":"https://docs.schema.org","@type":"WebPage"}</script>
+        </head>
+        <body><h1>Heading</h1></body>
+      </html>
+    `,
+    headers: {},
+    robotsContent: 'User-agent: *\nSitemap: https://example.com/sitemap.xml'
+  });
+
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.metadata.hasCanonical, true);
+});

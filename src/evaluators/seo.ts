@@ -1,4 +1,4 @@
-import * as cheerio from 'cheerio';
+import cheerio = require('cheerio');
 import type { AuditIssue, DomainResult, EvaluationContext, Evaluator } from '../core/types';
 import { scoreFromIssues } from '../core/types';
 import { RobotsPolicy } from '../core/robots';

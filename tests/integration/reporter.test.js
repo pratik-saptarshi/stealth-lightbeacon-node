@@ -98,3 +98,40 @@ test('Reporter integration: writes PDF output with injected browser renderer', a
 
   fs.rmSync(testOutputDir, { recursive: true, force: true });
 });
+
+test('Reporter integration: writes LLM markdown and GEO XML outputs', async () => {
+  const mod = await loadModule(path.join('core', 'reporter.js'));
+  const Reporter = mod.Reporter;
+  const mockReport = createMockReport();
+  const testOutputDir = path.join(__dirname, '..', '..', 'scratch_reports_formats_test');
+  fs.rmSync(testOutputDir, { recursive: true, force: true });
+
+  const reporter = new Reporter(testOutputDir);
+  const llmPath = reporter.writeLlm(mockReport);
+  const xmlPath = reporter.writeGeoXml(mockReport);
+
+  assert.match(fs.readFileSync(llmPath, 'utf8'), /<issue id="R-SEO-TITLE-MISS" severity="critical">/);
+  const xml = fs.readFileSync(xmlPath, 'utf8');
+  assert.match(xml, /<audit_report target="https:\/\/example.com\/">/);
+  assert.match(xml, /<location>&lt;head&gt;<\/location>/);
+
+  fs.rmSync(testOutputDir, { recursive: true, force: true });
+});
+
+test('Reporter integration: returns null when PDF renderer fails', async () => {
+  const mod = await loadModule(path.join('core', 'reporter.js'));
+  const Reporter = mod.Reporter;
+  const testOutputDir = path.join(__dirname, '..', '..', 'scratch_reports_pdf_fail_test');
+  fs.rmSync(testOutputDir, { recursive: true, force: true });
+
+  const reporter = new Reporter(testOutputDir, {
+    async render() {
+      throw new Error('browser unavailable');
+    }
+  });
+
+  assert.equal(await reporter.writePdf(createMockReport()), null);
+  assert.ok(fs.existsSync(path.join(testOutputDir, 'report.html')));
+
+  fs.rmSync(testOutputDir, { recursive: true, force: true });
+});

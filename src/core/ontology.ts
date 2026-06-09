@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import * as cheerio from 'cheerio';
+import cheerio = require('cheerio');
 import { z } from 'zod';
 import { createDuckDbRuntime, type DuckDbRuntime } from './db/duckdb';
 import { createLanceDbRuntime, type LanceDbRuntime } from './db/lancedb';

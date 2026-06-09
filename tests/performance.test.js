@@ -59,6 +59,15 @@ test('R-PERF-AGGREGATION: fires when no aggregated css or js', async () => {
   assert.ok(result.issues.some(i => i.id === 'R-PERF-AGGREGATION'));
 });
 
+test('R-PERF-AGGREGATION: warning when only one asset type is aggregated', async () => {
+  const { PerformanceEvaluator } = await loadModule('evaluators/performance.js');
+  const ev = new PerformanceEvaluator();
+  const result = await ev.evaluate(baseCtx({
+    html: '<html><head><link rel="stylesheet" href="css_123.css"></head><body><script src="/plain.js"></script></body></html>'
+  }));
+  assert.ok(result.issues.some(i => i.id === 'R-PERF-AGGREGATION' && i.severity === 'warning'));
+});
+
 test('R-PERF-IMAGES: fires when legacy jpg/png images present', async () => {
   const { PerformanceEvaluator } = await loadModule('evaluators/performance.js');
   const ev = new PerformanceEvaluator();
@@ -66,6 +75,15 @@ test('R-PERF-IMAGES: fires when legacy jpg/png images present', async () => {
     html: '<html><body><img src="test.jpg"><img src="test.png"><img src="test.gif"></body></html>'
   }));
   assert.ok(result.issues.some(i => i.id === 'R-PERF-IMAGES'));
+});
+
+test('R-PERF-IMAGES: warning when one legacy image is present', async () => {
+  const { PerformanceEvaluator } = await loadModule('evaluators/performance.js');
+  const ev = new PerformanceEvaluator();
+  const result = await ev.evaluate(baseCtx({
+    html: '<html><head><link rel="stylesheet" href="css_123.css"></head><body><script src="js_123.js"></script><img src="test.jpeg"></body></html>'
+  }));
+  assert.ok(result.issues.some(i => i.id === 'R-PERF-IMAGES' && i.severity === 'warning'));
 });
 
 test('R-PERF-LCP-CRIT: fires when pageSpeed.lcpMs > 4000', async () => {
@@ -138,4 +156,13 @@ test('R-PERF-LIGHTHOUSE: fires when score < 90', async () => {
     pageSpeed: { lighthousePerformanceScore: 45 }
   }));
   assert.ok(result.issues.some(i => i.id === 'R-PERF-LIGHTHOUSE' && i.severity === 'critical'));
+});
+
+test('R-PERF-LIGHTHOUSE: warning when score is below 90 but at least 50', async () => {
+  const { PerformanceEvaluator } = await loadModule('evaluators/performance.js');
+  const ev = new PerformanceEvaluator();
+  const result = await ev.evaluate(baseCtx({
+    pageSpeed: { lighthousePerformanceScore: 70 }
+  }));
+  assert.ok(result.issues.some(i => i.id === 'R-PERF-LIGHTHOUSE' && i.severity === 'warning'));
 });

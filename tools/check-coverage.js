@@ -3,9 +3,9 @@
 const { execSync } = require('node:child_process');
 const fs = require('node:fs');
 
-const MIN_LINE = Number(process.env.COVERAGE_MIN_LINE ?? 80);
-const MIN_BRANCH = Number(process.env.COVERAGE_MIN_BRANCH ?? 65);
-const MIN_FUNCTION = Number(process.env.COVERAGE_MIN_FUNCTION ?? 75);
+const MIN_LINE = Number(process.env.COVERAGE_MIN_LINE ?? 85);
+const MIN_BRANCH = Number(process.env.COVERAGE_MIN_BRANCH ?? 85);
+const MIN_FUNCTION = Number(process.env.COVERAGE_MIN_FUNCTION ?? 85);
 const COVERAGE_MODE = process.env.COVERAGE_MODE ?? 'full';
 
 /**
@@ -58,7 +58,7 @@ function quoteForShell(value) {
 
 function resolveCoverageCommand() {
   if (COVERAGE_MODE !== 'ci') {
-    return 'node --experimental-test-coverage --test tests/*.test.js';
+    return 'node --experimental-test-coverage --test tests/*.test.js tests/integration/*.test.js';
   }
 
   const tests = fs
@@ -72,7 +72,7 @@ function resolveCoverageCommand() {
     throw new Error('No CI coverage tests selected.');
   }
 
-  return `node --experimental-test-coverage --test ${tests.map(quoteForShell).join(' ')}`;
+  return `node --experimental-test-coverage --test ${tests.map(quoteForShell).join(' ')} tests/integration/*.test.js`;
 }
 
 // ---------------------------------------------------------------------------

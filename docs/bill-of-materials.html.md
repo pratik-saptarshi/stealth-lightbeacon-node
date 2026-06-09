@@ -247,9 +247,9 @@ The release owner must review SBOM requirements, secret-scan results, prod audit
 `pnpm run quality:check` includes coverage validation through `tools/check-coverage.js`.
 Current thresholds:
 
-- line coverage >= `80%`
-- branch coverage >= `65%`
-- function coverage >= `75%`
+- line coverage >= `85%`
+- branch coverage >= `85%`
+- function coverage >= `85%`
 
 ### 5.3 Release Automation
 

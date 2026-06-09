@@ -1,4 +1,4 @@
-import * as cheerio from 'cheerio';
+import cheerio = require('cheerio');
 import { createDuckDbRuntime } from './db/duckdb';
 
 class Mutex {

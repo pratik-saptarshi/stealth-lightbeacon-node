@@ -311,3 +311,17 @@ test('service close aborts and drains active evaluation runners before returning
     }
   }
 });
+
+test('default audit runner fails closed with a not implemented error', async () => {
+  const { defaultAuditRunner } = require('../dist/service/auditRunner.js');
+
+  await assert.rejects(
+    () => defaultAuditRunner({
+      id: 'eval-test',
+      targetUrl: 'https://example.test',
+      options: {},
+      signal: new AbortController().signal
+    }),
+    /not implemented/i
+  );
+});

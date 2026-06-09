@@ -148,7 +148,7 @@ This implementation plan details the product roadmap designed to close features 
 #### 🧩 Feature 4.2.1: Automated CI Coverage Gating
 - **User Story 4.2.1.1**: As a contributor, I want the build pipeline to reject commits that fail coverage limits or trigger lint errors.
   - **Tasks**:
-    - [ ] Configure [tools/check-coverage.js](file:///Users/neo/projects/stealth-lightbeacon-node/tools/check-coverage.js) to enforce `line >= 80%`, `branch >= 65%`, and `function >= 75%`.
+    - [ ] Configure [tools/check-coverage.js](file:///Users/neo/projects/stealth-lightbeacon-node/tools/check-coverage.js) to enforce `line >= 85%`, `branch >= 85%`, and `function >= 85%`.
     - [ ] Configure `pnpm run coverage:check` as a pre-commit block.
     - [ ] Link these checks to Github, GitLab, and Bitbucket runner configs.
   - **BEADS Tracking**:
@@ -160,7 +160,7 @@ This implementation plan details the product roadmap designed to close features 
 
 ## 🗺️ Test-Driven Development (TDD) Multiphase Implementation Roadmap
 
-This roadmap structures the closing of gaps and security vulnerabilities into distinct phases. At each milestone, corresponding test cases must be written/updated and executed to guarantee that overall test coverage remains **above 80%** (specifically targeting `line >= 80%`, `branch >= 65%`, and `function >= 75%`).
+This roadmap structures the closing of gaps and security vulnerabilities into distinct phases. At each milestone, corresponding test cases must be written/updated and executed to guarantee that overall test coverage remains **above 85%** (specifically targeting `line >= 85%`, `branch >= 85%`, and `function >= 85%`).
 
 ### Phase 1: Security & SSRF Governance Hardening (P0 Blocker Milestone)
 *Goal: Resolve all critical network boundary and validation vulnerabilities.*
@@ -233,12 +233,12 @@ This roadmap structures the closing of gaps and security vulnerabilities into di
 #### 🎯 Milestones & BEADS Tracking
 - **`B`**: Quality check scripts are unblocked in CI pipelines.
 - **`E`**: Coverage scripts in `package.json` are not wired up to block local or remote runners.
-- **`S`**: CI pipeline automatically rejects any commits dropping global workspace test coverage below 80%.
+- **`S`**: CI pipeline automatically rejects any commits dropping global workspace test coverage below 85%.
 
 #### 🧪 Test Cases & Coverage Gate
 - **TDD Test Updates**:
   - Verify that `tools/check-coverage.js` executes and correctly evaluates Jest/V8 coverage files.
-- **Gating Metric**: Execute `pnpm run quality:check`. Global codebase coverage must exceed **80%**.
+- **Gating Metric**: Execute `pnpm run quality:check`. Global codebase coverage must exceed **85%**.
 
 ---
 

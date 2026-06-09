@@ -69,3 +69,29 @@ test('UxEvaluator: flags small inline fonts, deep nav menu, and tap targets from
   assert.ok(result.issues.some(i => i.id === 'R-UX-NAV-DEPTH'), 'Expected R-UX-NAV-DEPTH');
   assert.ok(result.issues.some(i => i.id === 'R-UX-TAP-TARGET'), 'Expected R-UX-TAP-TARGET for small inline style');
 });
+
+test('UxEvaluator passes responsive readable pages with adequate controls and consent copy', async () => {
+  const mod = await loadModule(path.join('evaluators', 'ux.js'));
+  const evaluator = new mod.UxEvaluator();
+  const paragraph = 'Readable content gives visitors enough context to complete their task without scanning dense walls of copy.';
+
+  const result = await evaluator.evaluate({
+    url: 'https://example.com',
+    html: `
+      <html>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+        <body>
+          ${Array.from({ length: 16 }, () => `<p>${paragraph}</p>`).join('')}
+          <nav><ul><li><a data-width="64" data-height="64" href="/privacy">Privacy</a></li></ul></nav>
+          <button style="width: 64px; height: 64px;">Submit</button>
+          <p>Privacy and cookie consent messaging is available for visitors.</p>
+        </body>
+      </html>
+    `,
+    headers: {}
+  });
+
+  assert.deepEqual(result.issues, []);
+  assert.ok(result.metadata.textLength > 150);
+  assert.ok(result.metadata.shortParagraphCount > 0);
+});

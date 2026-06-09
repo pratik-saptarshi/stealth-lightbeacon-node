@@ -56,3 +56,23 @@ test('withHardTimeout aborts slow work with a timeout error', async () => {
   assert.equal(aborted, true);
   assert.ok(Date.now() - startedAt < 500);
 });
+
+test('withHardTimeout rejects invalid and external abort signals', async () => {
+  const mod = await loadModule(path.join('core', 'db', 'timeouts.js'));
+
+  await assert.rejects(
+    () => mod.withHardTimeout(async () => 'ok', { timeoutMs: 0 }),
+    /positive finite/
+  );
+
+  const controller = new AbortController();
+  controller.abort(new Error('external stop'));
+  await assert.rejects(
+    () => mod.withHardTimeout(async () => 'late', {
+      label: 'external-operation',
+      signal: controller.signal,
+      timeoutMs: 1000
+    }),
+    /external stop/
+  );
+});

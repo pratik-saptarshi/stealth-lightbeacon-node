@@ -143,9 +143,9 @@ pnpm run release:dry
 Before publishing, verify package metadata, tarball contents, secret-scan results, security alerts, README/SECURITY guidance, and GitHub Actions status against `docs/publishing-roadmap-checklist.md`.
 
 Coverage thresholds are enforced by `pnpm run coverage:check`:
-- line coverage >= `80%`
-- branch coverage >= `65%`
-- function coverage >= `75%`
+- line coverage >= `85%`
+- branch coverage >= `85%`
+- function coverage >= `85%`
 
 ## CI/CD Integration
 

@@ -70,6 +70,39 @@ test('MCP server handles agent.metadata call', async () => {
   assert.equal(result.agentCards[0].role, 'Security Auditor');
 });
 
+test('MCP server handles null, fallback list, forwarded calls, and stop', async () => {
+  const mod = await loadModule(path.join('mcp', 'server.js'));
+  let stopped = false;
+  const forwarded = [];
+  const server = mod.createMcpServer({
+    transport: {
+      send: async (message) => {
+        forwarded.push(message);
+        if (message.method === 'tools/list') {
+          throw new Error('bridge offline');
+        }
+        return { jsonrpc: '2.0', id: message.id ?? null, result: { ok: true } };
+      },
+      stop: () => {
+        stopped = true;
+      }
+    }
+  });
+
+  assert.equal(await server.handleRequest(null), null);
+
+  const listed = await server.handleRequest(makeRequest('tools/list', {}, 7));
+  assert.equal(listed.id, 7);
+  assert.ok(listed.result.tools.some((tool) => tool.name === 'audit.run'));
+
+  const forwardedResponse = await server.handleRequest(makeRequest('resources/list', {}, 8));
+  assert.deepEqual(forwardedResponse, { jsonrpc: '2.0', id: 8, result: { ok: true } });
+  assert.equal(forwarded.at(-1).method, 'resources/list');
+
+  server.stop();
+  assert.equal(stopped, true);
+});
+
 test('MCP server handles audit.diff call with initialized DB', async () => {
   const mod = await loadModule(path.join('mcp', 'server.js'));
   const dbMod = await loadModule(path.join('core', 'db', 'duckdb.js'));

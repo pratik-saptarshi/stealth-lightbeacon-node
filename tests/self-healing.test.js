@@ -45,3 +45,38 @@ test('SelectorHealer: heals when structural changes happen using Levenshtein tex
   assert.ok(result.confidence > 0.8);
   assert.equal(result.suggestedSelector, 'div.main-wrapper');
 });
+
+test('SelectorHealer: returns id selectors and stable misses', async () => {
+  const mod = await loadModule(path.join('core', 'selectorHealer.js'));
+  const html = `
+    <html>
+      <body>
+        <section id="primary" class="content featured">Recoverable headline</section>
+        <article class="other">Unrelated text</article>
+      </body>
+    </html>
+  `;
+
+  const healed = mod.SelectorHealer.heal(html, 'section.missing', {
+    expectedText: 'Recoverable headline',
+    expectedTagName: 'section',
+    expectedClasses: ['content', 'featured'],
+    threshold: 0.8
+  });
+  assert.equal(healed.healed, true);
+  assert.equal(healed.suggestedSelector, '#primary');
+  assert.equal(healed.recoveredText, 'Recoverable headline');
+
+  const missed = mod.SelectorHealer.heal(html, 'aside.missing', {
+    expectedText: 'Not present',
+    expectedTagName: 'aside',
+    threshold: 0.9
+  });
+  assert.deepEqual(missed, {
+    healed: false,
+    recoveredText: '',
+    suggestedSelector: 'aside.missing',
+    confidence: 0
+  });
+  assert.equal(mod.similarityScore('', ''), 1);
+});

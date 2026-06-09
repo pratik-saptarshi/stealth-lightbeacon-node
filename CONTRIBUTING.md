@@ -12,9 +12,9 @@ We enforce a strict TDD loop for all evaluator modifications and core changes:
 
 ### 2. Coverage Gate
 All changes must satisfy our continuous integration coverage thresholds. Locally and in CI, the minimum aggregate coverage requirements are:
-- **Line Coverage**: `>= 80%`
-- **Branch Coverage**: `>= 65%`
-- **Function Coverage**: `>= 75%`
+- **Line Coverage**: `>= 85%`
+- **Branch Coverage**: `>= 85%`
+- **Function Coverage**: `>= 85%`
 
 To run coverage checks locally:
 ```bash

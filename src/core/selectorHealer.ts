@@ -1,4 +1,4 @@
-import * as cheerio from 'cheerio';
+import cheerio = require('cheerio');
 
 export interface SelectorHealResult {
   healed: boolean;

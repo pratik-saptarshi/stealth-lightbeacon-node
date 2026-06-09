@@ -32,6 +32,18 @@ test('db schemas apply strict validation and defaults', async () => {
   );
 });
 
+test('db runtime context exposes defaults and aborts with caller reason', async () => {
+  const mod = await loadModule(path.join('core', 'db', 'runtime.js'));
+  const context = mod.createDbRuntimeContext({});
+
+  assert.equal(context.timeoutMs, 2000);
+  assert.equal(context.signal.aborted, false);
+  context.abort(new Error('manual abort'));
+  assert.equal(context.signal.aborted, true);
+  assert.match(context.signal.reason.message, /manual abort/);
+  assert.equal(mod.resolveDbTimeoutMs({ timeoutMs: 1234 }), 1234);
+});
+
 test('withTimeout rejects long-running work with a timeout error', async () => {
   const mod = await loadModule(path.join('core', 'db', 'index.js'));
 

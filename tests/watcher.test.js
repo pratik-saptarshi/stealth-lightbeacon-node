@@ -2,9 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-require('ts-node/register');
-
-const { WorkspaceWatcher } = require('../src/core/watcher.ts');
+const { WorkspaceWatcher } = require('../dist/core/watcher.js');
 
 function createScheduler() {
   let nextId = 1;
