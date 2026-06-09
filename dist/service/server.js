@@ -57,7 +57,9 @@ const ENDPOINTS = [
 ];
 async function startService(input = {}) {
     const config = (0, config_1.loadServiceConfig)(input);
+    assertSafeBindConfig(config);
     const startedAt = config.clock();
+    const canEvaluate = Boolean(config.auditRunner);
     const jobs = new jobs_1.EvaluationJobStore({
         auditRunner: config.auditRunner,
         clock: config.clock,
@@ -65,7 +67,17 @@ async function startService(input = {}) {
     });
     const artifacts = new artifacts_1.ArtifactStore(config.artifactRoot);
     const reconRunner = config.reconRunner ?? reconRunner_1.defaultReconRunner;
-    const server = createHttpServer(config.tls, async (request, response) => {
+    const server = createHttpServer(config.tls, (request, response) => {
+        void handleRequest(request, response).catch((error) => {
+            if (!response.headersSent) {
+                writeJson(response, 500, errorEnvelope('internal_error', error instanceof Error ? error.message : String(error)));
+            }
+            else {
+                response.destroy(error instanceof Error ? error : undefined);
+            }
+        });
+    });
+    async function handleRequest(request, response) {
         const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
         if (request.method === 'GET' && path === '/health') {
             writeJson(response, 200, {
@@ -93,11 +105,18 @@ async function startService(input = {}) {
                     ssrfGuard: true,
                     auth: Boolean(config.authToken),
                     tls: Boolean(config.tls)
+                },
+                execution: {
+                    evaluations: canEvaluate
                 }
             });
             return;
         }
         if (request.method === 'POST' && path === '/evaluations') {
+            if (!canEvaluate) {
+                writeJson(response, 501, errorEnvelope('not_implemented', 'Evaluation execution is not available in this service'));
+                return;
+            }
             const body = await readJsonBody(request);
             if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
                 writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
@@ -160,6 +179,10 @@ async function startService(input = {}) {
                 writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
                 return;
             }
+            if (body.allowPrivate === true && !config.allowPrivateRecon) {
+                writeJson(response, 403, errorEnvelope('private_recon_disabled', 'Private recon targets are disabled for this service'));
+                return;
+            }
             const recon = await reconRunner({
                 targetUrl: body.targetUrl.trim(),
                 allowPrivate: body.allowPrivate === true
@@ -210,7 +233,7 @@ async function startService(input = {}) {
                 message: 'Route not found'
             }
         });
-    });
+    }
     await listen(server, config.port, config.host);
     const address = server.address();
     if (!address || typeof address === 'string') {
@@ -245,6 +268,24 @@ function isAuthorized(request, authToken) {
         return true;
     }
     return request.headers.authorization === `Bearer ${authToken}`;
+}
+function assertSafeBindConfig(config) {
+    if (!isPublicBindHost(config.host)) {
+        return;
+    }
+    if (!config.authToken) {
+        throw new Error('An auth token is required for public service binds.');
+    }
+    if (!config.tls && !config.allowUnsafePublicHttp) {
+        throw new Error('Public cleartext service requires --unsafe-public-http.');
+    }
+}
+function isPublicBindHost(host) {
+    const normalized = host.trim().toLowerCase();
+    return normalized === '0.0.0.0' ||
+        normalized === '::' ||
+        normalized === '[::]' ||
+        normalized === '';
 }
 function readJsonBody(request) {
     return new Promise((resolve) => {

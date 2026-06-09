@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { listDefaultEvaluatorPlugins } from '../core/defaultEvaluators';
 import { ArtifactStore } from './artifacts';
-import { loadServiceConfig, type ServiceConfigInput } from './config';
+import { loadServiceConfig, type ServiceConfig, type ServiceConfigInput } from './config';
 import { EvaluationJobStore } from './jobs';
 import { defaultReconRunner } from './reconRunner';
 
@@ -32,7 +32,9 @@ const ENDPOINTS = [
 
 export async function startService(input: ServiceConfigInput = {}): Promise<StartedService> {
   const config = loadServiceConfig(input);
+  assertSafeBindConfig(config);
   const startedAt = config.clock();
+  const canEvaluate = Boolean(config.auditRunner);
   const jobs = new EvaluationJobStore({
     auditRunner: config.auditRunner,
     clock: config.clock,
@@ -40,7 +42,20 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
   });
   const artifacts = new ArtifactStore(config.artifactRoot);
   const reconRunner = config.reconRunner ?? defaultReconRunner;
-  const server = createHttpServer(config.tls, async (request, response) => {
+  const server = createHttpServer(config.tls, (request, response) => {
+    void handleRequest(request, response).catch((error) => {
+      if (!response.headersSent) {
+        writeJson(response, 500, errorEnvelope(
+          'internal_error',
+          error instanceof Error ? error.message : String(error)
+        ));
+      } else {
+        response.destroy(error instanceof Error ? error : undefined);
+      }
+    });
+  });
+
+  async function handleRequest(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
     const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
 
     if (request.method === 'GET' && path === '/health') {
@@ -71,12 +86,19 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
           ssrfGuard: true,
           auth: Boolean(config.authToken),
           tls: Boolean(config.tls)
+        },
+        execution: {
+          evaluations: canEvaluate
         }
       });
       return;
     }
 
     if (request.method === 'POST' && path === '/evaluations') {
+      if (!canEvaluate) {
+        writeJson(response, 501, errorEnvelope('not_implemented', 'Evaluation execution is not available in this service'));
+        return;
+      }
       const body = await readJsonBody(request);
       if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
         writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
@@ -143,6 +165,10 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
         writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
         return;
       }
+      if (body.allowPrivate === true && !config.allowPrivateRecon) {
+        writeJson(response, 403, errorEnvelope('private_recon_disabled', 'Private recon targets are disabled for this service'));
+        return;
+      }
       const recon = await reconRunner({
         targetUrl: body.targetUrl.trim(),
         allowPrivate: body.allowPrivate === true
@@ -196,7 +222,7 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
         message: 'Route not found'
       }
     });
-  });
+  }
 
   await listen(server, config.port, config.host);
   const address = server.address();
@@ -238,6 +264,26 @@ function isAuthorized(request: http.IncomingMessage, authToken: string | undefin
     return true;
   }
   return request.headers.authorization === `Bearer ${authToken}`;
+}
+
+function assertSafeBindConfig(config: ServiceConfig): void {
+  if (!isPublicBindHost(config.host)) {
+    return;
+  }
+  if (!config.authToken) {
+    throw new Error('An auth token is required for public service binds.');
+  }
+  if (!config.tls && !config.allowUnsafePublicHttp) {
+    throw new Error('Public cleartext service requires --unsafe-public-http.');
+  }
+}
+
+function isPublicBindHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === '0.0.0.0' ||
+    normalized === '::' ||
+    normalized === '[::]' ||
+    normalized === '';
 }
 
 function readJsonBody(request: http.IncomingMessage): Promise<Record<string, unknown> | undefined> {

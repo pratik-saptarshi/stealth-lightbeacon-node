@@ -11,6 +11,8 @@ export interface ServiceConfig {
   reconRunner?: ReconRunner;
   artifactRoot: string;
   authToken?: string;
+  allowUnsafePublicHttp: boolean;
+  allowPrivateRecon: boolean;
   tls?: {
     keyPath: string;
     certPath: string;
@@ -27,6 +29,8 @@ export interface ServiceConfigInput {
   reconRunner?: ReconRunner;
   artifactRoot?: unknown;
   authToken?: unknown;
+  allowUnsafePublicHttp?: unknown;
+  allowPrivateRecon?: unknown;
   tlsKeyPath?: unknown;
   tlsCertPath?: unknown;
 }
@@ -42,6 +46,8 @@ export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig
     reconRunner: input.reconRunner,
     artifactRoot: parseArtifactRoot(input.artifactRoot),
     authToken: parseOptionalString(input.authToken),
+    allowUnsafePublicHttp: input.allowUnsafePublicHttp === true,
+    allowPrivateRecon: input.allowPrivateRecon === true,
     tls: parseTls(input.tlsKeyPath, input.tlsCertPath)
   };
 }

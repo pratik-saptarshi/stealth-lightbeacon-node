@@ -97,5 +97,10 @@ test('compiled cli exports serve handler and exposes serve help', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /--host <host>/);
   assert.match(result.stdout, /--port <port>/);
+  assert.match(result.stdout, /--auth-token <token>/);
+  assert.match(result.stdout, /--tls-key <path>/);
+  assert.match(result.stdout, /--tls-cert <path>/);
+  assert.match(result.stdout, /--artifact-root <path>/);
+  assert.match(result.stdout, /--unsafe-public-http/);
   assert.match(result.stdout, /--no-persist/);
 });

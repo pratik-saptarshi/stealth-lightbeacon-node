@@ -79,6 +79,38 @@ test('evaluation lifecycle accepts jobs and returns queued then succeeded state'
   }
 });
 
+test('default service reports evaluations as not implemented instead of accepting doomed jobs', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    persistence: false,
+    version: 'contract-test'
+  });
+
+  try {
+    const capabilities = await requestJson(`${service.url}/capabilities`);
+    assert.equal(capabilities.status, 200);
+    assert.equal(capabilities.body.execution.evaluations, false);
+
+    const created = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://example.test' })
+    });
+
+    assert.equal(created.status, 501);
+    assert.deepEqual(created.body, {
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'Evaluation execution is not available in this service'
+      }
+    });
+  } finally {
+    await service.close();
+  }
+});
+
 test('evaluation lifecycle isolates concurrent jobs and failed state', async () => {
   const { startService } = require('../dist/service/server.js');
   const service = await startService({

@@ -12,6 +12,8 @@ function loadServiceConfig(input = {}) {
         reconRunner: input.reconRunner,
         artifactRoot: parseArtifactRoot(input.artifactRoot),
         authToken: parseOptionalString(input.authToken),
+        allowUnsafePublicHttp: input.allowUnsafePublicHttp === true,
+        allowPrivateRecon: input.allowPrivateRecon === true,
         tls: parseTls(input.tlsKeyPath, input.tlsCertPath)
     };
 }

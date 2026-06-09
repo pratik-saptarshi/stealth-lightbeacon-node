@@ -77,6 +77,40 @@ test('invalid tls config fails fast before binding', async () => {
   );
 });
 
+test('public binds require auth and explicit unsafe cleartext opt-in', async () => {
+  const { startService } = require('../dist/service/server.js');
+
+  await assert.rejects(
+    () => startService({
+      host: '0.0.0.0',
+      port: 0
+    }),
+    /auth token is required/i
+  );
+
+  await assert.rejects(
+    () => startService({
+      host: '0.0.0.0',
+      port: 0,
+      authToken: 'secret-token'
+    }),
+    /public cleartext service requires --unsafe-public-http/i
+  );
+
+  const service = await startService({
+    host: '0.0.0.0',
+    port: 0,
+    authToken: 'secret-token',
+    allowUnsafePublicHttp: true
+  });
+
+  try {
+    assert.equal(service.address.host, '0.0.0.0');
+  } finally {
+    await service.close();
+  }
+});
+
 test('terminal job state and artifacts reload after restart', async () => {
   const { startService } = require('../dist/service/server.js');
   const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'slb-recovery-'));

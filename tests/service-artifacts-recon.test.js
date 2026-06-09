@@ -159,3 +159,77 @@ test('recon endpoint validates payload and does not create evaluation side effec
     await service.close();
   }
 });
+
+test('recon endpoint rejects private probing unless service explicitly allows it', async () => {
+  const { startService } = require('../dist/service/server.js');
+  let reconCalls = 0;
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    reconRunner: async () => {
+      reconCalls += 1;
+      return {
+        targetUrl: 'http://127.0.0.1',
+        detectedProtections: [],
+        recommendedEngine: 'http',
+        recommendedThrottleMs: 0,
+        reason: 'private target allowed'
+      };
+    }
+  });
+
+  try {
+    const rejected = await requestJson(`${service.url}/recon`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'http://127.0.0.1', allowPrivate: true })
+    });
+
+    assert.equal(rejected.status, 403);
+    assert.deepEqual(rejected.body, {
+      ok: false,
+      error: {
+        code: 'private_recon_disabled',
+        message: 'Private recon targets are disabled for this service'
+      }
+    });
+    assert.equal(reconCalls, 0);
+  } finally {
+    await service.close();
+  }
+});
+
+test('recon route errors return stable json envelopes without unhandled rejections', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    reconRunner: async () => {
+      throw new Error('recon dependency failed');
+    }
+  });
+
+  try {
+    const response = await requestJson(`${service.url}/recon`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://example.test' })
+    });
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(response.body, {
+      ok: false,
+      error: {
+        code: 'internal_error',
+        message: 'recon dependency failed'
+      }
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+    await service.close();
+  }
+});
