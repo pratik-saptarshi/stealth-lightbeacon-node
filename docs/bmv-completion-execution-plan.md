@@ -485,3 +485,43 @@ items first, then P2 hardening, then P3 maintainability work.
 - After any Beads changes, run `bd export -o .beads/issues.jsonl`.
 - Do not close parent phases until every child is closed and the phase gate is
   recorded in the parent close reason.
+
+## Second Post-Overseer Follow-Up Roadmap
+
+Review src: `$overseer` panel on `main` at `7f10e8c` after the first
+remediation merge, integrated by `$plan-review-integrator`.
+
+Parent epic: `stealth-lightbeacon-node-2go` — Post-overseer follow-up: network
+safety and publish governance hardening.
+
+| Capability | Epic / Feature | Beads | Functions / surfaces |
+| Service hardening | Network, artifact, and lifecycle contracts | `2go.1` | `SSRFGuard.validate`, `isPrivateIpv4`, `isPrivateAddress`, `startService`, `ArtifactStore.open`, `AuditRunner`, `EvaluationJobStore.close`, `engineSchema`, `reportFormatSchema` |
+| Release governance | Evidence and release path governance | `2go.2` | `validateReleaseSecurityGate`, `.github/workflows/ci.yml`, `tools/release.sh`, `.gitlab-ci.yml`, `bitbucket-pipelines.yml` |
+| Metadata/docs consistency | Package metadata and publish docs | `2go.3` | `main`, `package.json`, `docs/bill-of-materials.html.md` |
+
+### Second Finding Integration Summary
+
+| Finding | Severity | Category | Beads | Acceptance gate |
+| Malformed artifact URL encoding can escape artifact-path validation and return `500` | P2 | Must-fix | `2go.1.1` | Malformed percent-encoded artifact names return `400 invalid_artifact_path` without decoder details |
+| SSRF guard permits some non-global IP ranges | P2 | Must-fix | `2go.1.2` | Literal IP and DNS-result validation block all non-global IPv4/IPv6 ranges unless `allowPrivate` is enabled |
+| Service close marks active jobs failed but does not cancel or drain runners | P2 | Bundle | `2go.1.3` | `AuditRunner` receives cancellation; store aborts/drains active work with bounded semantics |
+| `/capabilities` duplicates engine/format literals from runtime schemas | P3 | Bundle | `2go.1.4` | Capabilities derive engines/formats from a shared runtime contract or exported schemas |
+| CI writes dependency-list JSON to a CycloneDX-named SBOM evidence file | P2 | Must-fix | `2go.2.1` | CI generates valid CycloneDX/SPDX evidence or relabels docs/artifacts as dependency inventory; checker validates schema |
+| Production release wrapper does not enforce release security evidence gate | P3 | Bundle | `2go.2.2` | `tools/release.sh` runs `release:security:check` or verifies a checked evidence bundle before `release-it` |
+| Non-GitHub CI configs are stale against Node 24 and pnpm policy | P3 | Defer | `2go.2.3` | Alternate CI configs are aligned with GitHub Actions or removed/documented inactive |
+| CLI `--version` reports stale hard-coded package version | P3 | Must-fix | `2go.3.1` | CLI version output matches `package.json` with a drift regression test |
+| BOM still describes an npm-blocking `preinstall` hook | P3 | Must-fix | `2go.3.2` | BOM accurately states pnpm is pinned for repo work and no `preinstall` blocks npm global install |
+
+Disposition notes:
+- The panel claim that per-commit CI must run `release:security:check` is not
+  accepted as stated. The checklist intentionally labels it `MANUAL` because it
+  requires completed release evidence and human release decisions. The accepted
+  remediation is narrower: enforce that gate in the production release wrapper.
+- Prior remediations for public bind auth/TLS, private recon gating, bounded
+  JSON payloads, artifact symlink escapes, direct artifact status gates,
+  route-level async envelopes, package-boundary policy externalization, and
+  evidence-file existence checks remain accepted and closed under `43w`.
+
+Final recommendation: Applied with caveats. Proceed with P2 follow-ups first:
+`2go.1.1`, `2go.1.2`, `2go.1.3`, and `2go.2.1`. Then complete P3
+metadata/docs/CI maintainability tasks.
