@@ -6,6 +6,46 @@ const { validateReleaseSecurityGate } = require('../tools/check-release-security
 
 const rootDir = path.join(__dirname, '..');
 
+const requiredChecklist = [
+  '- [x] `AUTO` `pnpm run quality:check`.',
+  '- [x] `AUTO` `pnpm audit --prod` passes locally and in CI.',
+  '- [x] `MANUAL` Secret scan covers repository and packed tarball output before publish.',
+  '- [x] `MANUAL` SBOM generated and attached if required by org policy; evidence path `.tmp/release-evidence/sbom.cyclonedx.json`.',
+  '- [x] `AUTO` `pnpm pack --dry-run` runs in CI.',
+  '- [x] `MANUAL` Artifact hygiene review covers generated reports, caches, local config, packed tarball contents, and release evidence redaction.',
+  '- [x] `MANUAL` Release evidence redacts API keys, cookies, auth headers, private hostnames, customer data, and proprietary page contents.',
+  '- [x] `EVIDENCE` Secret scan output captured at `.tmp/release-evidence/secret-scan.txt`.',
+  '- [x] `EVIDENCE` Prod audit output captured at `.tmp/release-evidence/audit-prod.txt`.',
+  '- [x] `EVIDENCE` Pack dry-run output captured at `.tmp/release-evidence/pack-dry-run.txt`.'
+].join('\n');
+
+const requiredBom = [
+  '- `.tmp/release-evidence/sbom.cyclonedx.json`',
+  '- `.tmp/release-evidence/secret-scan.txt`',
+  '- `.tmp/release-evidence/audit-prod.txt`',
+  '- `.tmp/release-evidence/pack-dry-run.txt`'
+].join('\n');
+
+const packageJsonWithReleaseScripts = {
+  scripts: {
+    'quality:check': 'ok',
+    'audit:signatures': 'ok',
+    'pack:dry': 'ok',
+    'release:dry': 'ok'
+  }
+};
+
+function createEvidenceFixture(t) {
+  const tempDir = fs.mkdtempSync(path.join(__dirname, 'release-evidence-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const evidenceDir = path.join(tempDir, '.tmp', 'release-evidence');
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  for (const file of ['sbom.cyclonedx.json', 'secret-scan.txt', 'audit-prod.txt', 'pack-dry-run.txt']) {
+    fs.writeFileSync(path.join(evidenceDir, file), 'captured\n');
+  }
+  return tempDir;
+}
+
 test('release security gate fails with actionable missing evidence', () => {
   const result = validateReleaseSecurityGate({
     checklist: '- pnpm run quality:check',
@@ -19,10 +59,40 @@ test('release security gate fails with actionable missing evidence', () => {
   assert.ok(result.errors.includes('missing package script: audit:signatures'));
 });
 
-test('current release docs map security gates to commands evidence and manual decisions', () => {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
-  const checklist = fs.readFileSync(path.join(rootDir, 'docs', 'publishing-roadmap-checklist.md'), 'utf8');
-  const bom = fs.readFileSync(path.join(rootDir, 'docs', 'bill-of-materials.html.md'), 'utf8');
+test('release security gate fails when required checklist items are unchecked', (t) => {
+  const evidenceRoot = createEvidenceFixture(t);
+  const result = validateReleaseSecurityGate({
+    checklist: requiredChecklist.replace('- [x] `AUTO` `pnpm audit --prod`', '- [ ] `AUTO` `pnpm audit --prod`'),
+    bom: requiredBom,
+    packageJson: packageJsonWithReleaseScripts,
+    evidenceRoot
+  });
 
-  assert.deepEqual(validateReleaseSecurityGate({ checklist, bom, packageJson }).errors, []);
+  assert.ok(result.errors.includes('unchecked checklist gate: audit'));
+});
+
+test('release security gate fails when required evidence files are missing', (t) => {
+  const evidenceRoot = createEvidenceFixture(t);
+  fs.rmSync(path.join(evidenceRoot, '.tmp', 'release-evidence', 'sbom.cyclonedx.json'), { force: true });
+
+  const result = validateReleaseSecurityGate({
+    checklist: requiredChecklist,
+    bom: requiredBom,
+    packageJson: packageJsonWithReleaseScripts,
+    evidenceRoot
+  });
+
+  assert.ok(result.errors.includes('missing evidence file: .tmp/release-evidence/sbom.cyclonedx.json'));
+});
+
+test('release security gate passes when checklist is complete and evidence files exist', (t) => {
+  const evidenceRoot = createEvidenceFixture(t);
+  const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+
+  assert.deepEqual(validateReleaseSecurityGate({
+    checklist: requiredChecklist,
+    bom: requiredBom,
+    packageJson,
+    evidenceRoot
+  }).errors, []);
 });

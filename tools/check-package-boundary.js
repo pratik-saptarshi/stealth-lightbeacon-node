@@ -29,14 +29,39 @@ function normalizePackPath(filePath) {
 }
 
 function parsePackDryRunFiles(output) {
-  return output
-    .split(/\r?\n/)
-    .map((line) => {
-      const trimmed = line.trim();
-      const match = trimmed.match(/^(?:npm notice\s+)?(?:[\d.]+\s*[KMGT]?B\s+)(.+)$/i);
-      return match ? normalizePackPath(match[1]) : '';
-    })
-    .filter(Boolean);
+  const files = [];
+  let inTarballContents = false;
+
+  for (const line of output.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    const content = trimmed.replace(/^npm notice\s+/i, '');
+
+    if (!content) {
+      continue;
+    }
+
+    if (/^=*\s*Tarball Contents\s*=*$/i.test(content)) {
+      inTarballContents = true;
+      continue;
+    }
+
+    if (/^=*\s*Tarball Details\s*=*$/i.test(content)) {
+      inTarballContents = false;
+      continue;
+    }
+
+    const sizeLine = content.match(/^(?:[\d.]+\s*[KMGT]?B\s+)(.+)$/i);
+    if (sizeLine) {
+      files.push(normalizePackPath(sizeLine[1]));
+      continue;
+    }
+
+    if (inTarballContents) {
+      files.push(normalizePackPath(content));
+    }
+  }
+
+  return files.filter(Boolean);
 }
 
 function arraysEqual(actual, expected) {
@@ -88,6 +113,10 @@ function isDisallowedArtifact(filePath) {
 function validatePackageBoundary({ packageJson, files }) {
   const errors = [];
   const packageFiles = Array.isArray(packageJson.files) ? packageJson.files : [];
+
+  if (!Array.isArray(files) || files.length === 0) {
+    errors.push('no tarball files parsed from pack dry-run output');
+  }
 
   if (!arraysEqual(packageJson.files, EXPECTED_FILES)) {
     errors.push(`package.json files must equal ${JSON.stringify(EXPECTED_FILES)}`);

@@ -20,14 +20,33 @@ const REQUIRED_BOM_PATTERNS = [
   { id: 'audit-evidence', pattern: /\.tmp\/release-evidence\/audit-prod\.txt/ }
 ];
 
+const REQUIRED_EVIDENCE_FILES = [
+  '.tmp/release-evidence/sbom.cyclonedx.json',
+  '.tmp/release-evidence/secret-scan.txt',
+  '.tmp/release-evidence/audit-prod.txt',
+  '.tmp/release-evidence/pack-dry-run.txt'
+];
+
+function hasCheckedChecklistItem(checklist, pattern) {
+  return checklist
+    .split(/\r?\n/)
+    .some((line) => /^-\s+\[[xX]\]/.test(line) && pattern.test(line));
+}
+
 function validateReleaseSecurityGate(input) {
   const checklist = input.checklist ?? '';
   const bom = input.bom ?? '';
   const packageJson = input.packageJson ?? {};
+  const evidenceRoot = input.evidenceRoot ?? path.join(__dirname, '..');
   const errors = [];
 
   for (const requirement of REQUIRED_CHECKLIST_PATTERNS) {
-    if (!requirement.pattern.test(checklist)) {
+    if (hasCheckedChecklistItem(checklist, requirement.pattern)) {
+      continue;
+    }
+    if (requirement.pattern.test(checklist)) {
+      errors.push(`unchecked checklist gate: ${requirement.id}`);
+    } else {
       errors.push(`missing checklist gate: ${requirement.id}`);
     }
   }
@@ -35,6 +54,17 @@ function validateReleaseSecurityGate(input) {
   for (const requirement of REQUIRED_BOM_PATTERNS) {
     if (!requirement.pattern.test(bom)) {
       errors.push(`missing BOM evidence path: ${requirement.id}`);
+    }
+  }
+
+  for (const file of REQUIRED_EVIDENCE_FILES) {
+    const filePath = path.join(evidenceRoot, file);
+    if (!fs.existsSync(filePath)) {
+      errors.push(`missing evidence file: ${file}`);
+      continue;
+    }
+    if (fs.statSync(filePath).size === 0) {
+      errors.push(`empty evidence file: ${file}`);
     }
   }
 
