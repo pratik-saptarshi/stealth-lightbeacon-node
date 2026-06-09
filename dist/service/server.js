@@ -57,7 +57,9 @@ const ENDPOINTS = [
 ];
 async function startService(input = {}) {
     const config = (0, config_1.loadServiceConfig)(input);
+    assertSafeBindConfig(config);
     const startedAt = config.clock();
+    const canEvaluate = Boolean(config.auditRunner);
     const jobs = new jobs_1.EvaluationJobStore({
         auditRunner: config.auditRunner,
         clock: config.clock,
@@ -65,7 +67,21 @@ async function startService(input = {}) {
     });
     const artifacts = new artifacts_1.ArtifactStore(config.artifactRoot);
     const reconRunner = config.reconRunner ?? reconRunner_1.defaultReconRunner;
-    const server = createHttpServer(config.tls, async (request, response) => {
+    const server = createHttpServer(config.tls, (request, response) => {
+        void handleRequest(request, response).catch((error) => {
+            if (!response.headersSent) {
+                if (error instanceof PayloadTooLargeError) {
+                    writeJson(response, 413, errorEnvelope('payload_too_large', error.message));
+                    return;
+                }
+                writeJson(response, 500, errorEnvelope('internal_error', error instanceof Error ? error.message : String(error)));
+            }
+            else {
+                response.destroy(error instanceof Error ? error : undefined);
+            }
+        });
+    });
+    async function handleRequest(request, response) {
         const path = request.url ? new URL(request.url, `http://${config.host}`).pathname : '/';
         if (request.method === 'GET' && path === '/health') {
             writeJson(response, 200, {
@@ -74,7 +90,24 @@ async function startService(input = {}) {
                 version: config.version,
                 uptimeMs: Math.max(0, config.clock() - startedAt),
                 persistence: { enabled: config.persistence },
-                ...(jobs.recoveryError ? { recovery: { ok: false, error: jobs.recoveryError } } : {})
+                ...(jobs.recoveryError ? { recovery: { ok: false } } : {})
+            });
+            return;
+        }
+        if (request.method === 'GET' && path === '/health/recovery') {
+            if (!config.authToken) {
+                writeJson(response, 404, errorEnvelope('not_found', 'Route not found'));
+                return;
+            }
+            if (!isAuthorized(request, config.authToken)) {
+                writeJson(response, 401, errorEnvelope('unauthorized', 'Bearer token is required'));
+                return;
+            }
+            writeJson(response, 200, {
+                ok: !jobs.recoveryError,
+                recovery: jobs.recoveryError
+                    ? { ok: false, error: jobs.recoveryError }
+                    : { ok: true }
             });
             return;
         }
@@ -93,12 +126,19 @@ async function startService(input = {}) {
                     ssrfGuard: true,
                     auth: Boolean(config.authToken),
                     tls: Boolean(config.tls)
+                },
+                execution: {
+                    evaluations: canEvaluate
                 }
             });
             return;
         }
         if (request.method === 'POST' && path === '/evaluations') {
-            const body = await readJsonBody(request);
+            if (!canEvaluate) {
+                writeJson(response, 501, errorEnvelope('not_implemented', 'Evaluation execution is not available in this service'));
+                return;
+            }
+            const body = await readJsonBody(request, config.jsonBodyLimitBytes);
             if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
                 writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
                 return;
@@ -139,6 +179,10 @@ async function startService(input = {}) {
                 writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
                 return;
             }
+            if (job.status !== 'succeeded') {
+                writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
+                return;
+            }
             const artifact = artifacts.open(id, decodeURIComponent(evaluationArtifactMatch[2]));
             if (artifact === 'invalid') {
                 writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
@@ -155,9 +199,13 @@ async function startService(input = {}) {
             return;
         }
         if (request.method === 'POST' && path === '/recon') {
-            const body = await readJsonBody(request);
+            const body = await readJsonBody(request, config.jsonBodyLimitBytes);
             if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
                 writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
+                return;
+            }
+            if (body.allowPrivate === true && !config.allowPrivateRecon) {
+                writeJson(response, 403, errorEnvelope('private_recon_disabled', 'Private recon targets are disabled for this service'));
                 return;
             }
             const recon = await reconRunner({
@@ -210,7 +258,7 @@ async function startService(input = {}) {
                 message: 'Route not found'
             }
         });
-    });
+    }
     await listen(server, config.port, config.host);
     const address = server.address();
     if (!address || typeof address === 'string') {
@@ -223,7 +271,10 @@ async function startService(input = {}) {
             port: address.port
         },
         url: `${config.tls ? 'https' : 'http'}://${config.host}:${address.port}`,
-        close: () => closeServer(server)
+        close: async () => {
+            jobs.close();
+            await closeServer(server);
+        }
     };
 }
 function createHttpServer(tls, listener) {
@@ -246,23 +297,67 @@ function isAuthorized(request, authToken) {
     }
     return request.headers.authorization === `Bearer ${authToken}`;
 }
-function readJsonBody(request) {
-    return new Promise((resolve) => {
+function assertSafeBindConfig(config) {
+    if (!isPublicBindHost(config.host)) {
+        return;
+    }
+    if (!config.authToken) {
+        throw new Error('An auth token is required for public service binds.');
+    }
+    if (!config.tls && !config.allowUnsafePublicHttp) {
+        throw new Error('Public cleartext service requires --unsafe-public-http.');
+    }
+}
+function isPublicBindHost(host) {
+    const normalized = host.trim().toLowerCase();
+    return normalized === '0.0.0.0' ||
+        normalized === '::' ||
+        normalized === '[::]' ||
+        normalized === '';
+}
+class PayloadTooLargeError extends Error {
+    constructor(limitBytes) {
+        super(`JSON request body exceeds ${limitBytes} bytes`);
+    }
+}
+function readJsonBody(request, limitBytes) {
+    return new Promise((resolve, reject) => {
         const chunks = [];
+        let sizeBytes = 0;
+        let done = false;
         request.on('data', (chunk) => {
+            if (done) {
+                return;
+            }
+            sizeBytes += chunk.length;
+            if (sizeBytes > limitBytes) {
+                done = true;
+                request.pause();
+                reject(new PayloadTooLargeError(limitBytes));
+                return;
+            }
             chunks.push(chunk);
         });
         request.on('end', () => {
+            if (done) {
+                return;
+            }
+            done = true;
             try {
                 const text = Buffer.concat(chunks).toString('utf8');
-                resolve(isRecord(JSON.parse(text)) ? JSON.parse(text) : undefined);
+                const parsed = JSON.parse(text);
+                resolve(isRecord(parsed) ? parsed : undefined);
             }
             catch {
                 resolve(undefined);
             }
         });
-        request.on('error', () => {
-            resolve(undefined);
+        request.on('error', (error) => {
+            if (done) {
+                return;
+            }
+            done = true;
+            reject(error);
         });
     });
 }

@@ -51,7 +51,7 @@ Any unchecked P0 item is a no-go.
 - [ ] `MANUAL` Secret scan covers repository and packed tarball output before publish.
 - [ ] `MANUAL` `.env.example` contains placeholders only.
 - [ ] `MANUAL` Release evidence redacts API keys, cookies, auth headers, private hostnames, customer data, and proprietary page contents.
-- [ ] `AUTO` `pnpm run release:security:check` verifies checklist/BOM coverage without network access.
+- [ ] `MANUAL` `pnpm run release:security:check` verifies completed release evidence locally before publish; it is not a per-commit CI gate because it requires human-reviewed release decisions and evidence redaction.
 - [ ] `MANUAL` SBOM generated and attached if required by org policy; evidence path `.tmp/release-evidence/sbom.cyclonedx.json`.
 - [ ] `EVIDENCE` Secret scan output captured at `.tmp/release-evidence/secret-scan.txt`.
 - [ ] `EVIDENCE` Prod audit output captured at `.tmp/release-evidence/audit-prod.txt`.
@@ -77,7 +77,7 @@ Any unchecked P0 item is a no-go.
 
 ## G) Release Dry-Run Gate
 
-- [ ] `AUTO` `pnpm run release:dry` runs successfully before publish.
+- [ ] `MANUAL` `pnpm run release:dry` runs successfully before publish; it is not a per-commit CI gate because it requires a release branch, changelog decision, and publish-owner confirmation.
 - [ ] `MANUAL` Version bump type is correct.
 - [ ] `MANUAL` Changelog entries map to conventional commits.
 - [ ] `MANUAL` Rollback plan is ready: patch-forward, deprecate, or tag rollback.

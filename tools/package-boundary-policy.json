@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "files": [
+    "dist/**/*.js",
+    "README.md",
+    "readme.md",
+    "LICENSE",
+    "SECURITY.md",
+    ".env.example"
+  ],
+  "bin": {
+    "stealth-lightbeacon": "dist/cli.js",
+    "stealth-lightbeacon-mcp": "dist/mcp/stdio.js"
+  }
+}

@@ -13,7 +13,7 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "pnpm run build",
     "pack:dry": "pnpm pack --dry-run",
-    "audit:signatures": "pnpm audit",
+    "audit:signatures": "pnpm audit --prod",
     "release:security:check": "node tools/check-release-security.js",
     "pretest": "pnpm run build",
     "test": "node --test tests/*.test.js",

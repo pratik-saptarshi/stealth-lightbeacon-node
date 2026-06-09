@@ -100,6 +100,12 @@ export async function main(): Promise<void> {
     .command('serve')
     .option('--host <host>', 'Service bind host', '127.0.0.1')
     .option('--port <port>', 'Service bind port', '8787')
+    .option('--auth-token <token>', 'Bearer token required for service API requests')
+    .option('--tls-key <path>', 'TLS private key path')
+    .option('--tls-cert <path>', 'TLS certificate path')
+    .option('--artifact-root <path>', 'Service artifact storage root')
+    .option('--allow-private-recon', 'Allow /recon requests to opt into private or loopback targets', false)
+    .option('--unsafe-public-http', 'Allow authenticated public binds over cleartext HTTP', false)
     .option('--persist', 'Enable service persistence', true)
     .option('--no-persist', 'Disable service persistence')
     .action(async (options: Record<string, unknown>) => {
@@ -175,6 +181,12 @@ export async function serveCommand(rawOptions: Record<string, unknown> = {}): Pr
     host: rawOptions.host,
     port: rawOptions.port,
     persistence: rawOptions.persist,
+    authToken: rawOptions.authToken ?? process.env.STEALTH_LIGHTBEACON_SERVICE_TOKEN,
+    tlsKeyPath: rawOptions.tlsKey,
+    tlsCertPath: rawOptions.tlsCert,
+    artifactRoot: rawOptions.artifactRoot,
+    allowPrivateRecon: rawOptions.allowPrivateRecon,
+    allowUnsafePublicHttp: rawOptions.unsafePublicHttp,
     version: '3.0.11'
   });
 

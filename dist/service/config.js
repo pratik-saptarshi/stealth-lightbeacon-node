@@ -12,6 +12,9 @@ function loadServiceConfig(input = {}) {
         reconRunner: input.reconRunner,
         artifactRoot: parseArtifactRoot(input.artifactRoot),
         authToken: parseOptionalString(input.authToken),
+        allowUnsafePublicHttp: input.allowUnsafePublicHttp === true,
+        allowPrivateRecon: input.allowPrivateRecon === true,
+        jsonBodyLimitBytes: parseJsonBodyLimitBytes(input.jsonBodyLimitBytes),
         tls: parseTls(input.tlsKeyPath, input.tlsCertPath)
     };
 }
@@ -32,6 +35,13 @@ function parseArtifactRoot(artifactRoot) {
     return typeof artifactRoot === 'string' && artifactRoot.trim()
         ? artifactRoot.trim()
         : 'reports/service-artifacts';
+}
+function parseJsonBodyLimitBytes(limit) {
+    const parsed = Number(limit ?? 64 * 1024);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+        return 64 * 1024;
+    }
+    return parsed;
 }
 function parseOptionalString(value) {
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;

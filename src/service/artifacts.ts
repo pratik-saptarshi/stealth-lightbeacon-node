@@ -1,4 +1,4 @@
-import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { createReadStream, lstatSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { ReadStream } from 'node:fs';
 
@@ -45,15 +45,24 @@ export class ArtifactStore {
     }
 
     try {
-      const stats = statSync(artifactPath);
+      const evaluationRealPath = realpathSync(evaluationDir);
+      const linkStats = lstatSync(artifactPath);
+      if (linkStats.isSymbolicLink()) {
+        return 'invalid';
+      }
+      const realArtifactPath = realpathSync(artifactPath);
+      if (!realArtifactPath.startsWith(`${evaluationRealPath}/`)) {
+        return 'invalid';
+      }
+      const stats = statSync(realArtifactPath);
       if (!stats.isFile()) {
         return undefined;
       }
       return {
         name: rawName,
-        path: artifactPath,
+        path: realArtifactPath,
         contentType: contentTypeFor(rawName),
-        stream: createReadStream(artifactPath)
+        stream: createReadStream(realArtifactPath)
       };
     } catch {
       return undefined;

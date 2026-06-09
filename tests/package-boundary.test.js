@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -11,6 +12,19 @@ const {
 function readPackageJson() {
   return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 }
+
+test('package-boundary validator reads expected files and bin from external policy data', () => {
+  const packageJson = readPackageJson();
+  const policyPath = path.join(__dirname, '..', 'tools', 'package-boundary-policy.json');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'check-package-boundary.js'), 'utf8');
+  const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+
+  assert.equal(policy.version, 1);
+  assert.deepEqual(packageJson.files, policy.files);
+  assert.deepEqual(packageJson.bin, policy.bin);
+  assert.doesNotMatch(source, /const\s+EXPECTED_FILES\s*=\s*\[/);
+  assert.doesNotMatch(source, /const\s+EXPECTED_BIN\s*=\s*\{/);
+});
 
 test('package.json declares a runtime-only tarball boundary and bin policy', () => {
   const packageJson = readPackageJson();
@@ -99,6 +113,55 @@ npm notice 1.0kB package/.cache/playwright/state.json
     'disallowed tarball path: .npmrc',
     'disallowed tarball path: .cache/playwright/state.json'
   ]);
+});
+
+test('pack dry-run parsing handles pnpm path-only tarball contents', () => {
+  const packageJson = readPackageJson();
+  const dryRunOutput = `
+Tarball Contents
+package.json
+dist/index.js
+dist/cli.js
+dist/mcp/stdio.js
+dist/service/server.js
+README.md
+LICENSE
+SECURITY.md
+.env.example
+tests/package-boundary.test.js
+Tarball Details
+`;
+
+  const files = parsePackDryRunFiles(dryRunOutput);
+  const result = validatePackageBoundary({ packageJson, files });
+
+  assert.deepEqual(files, [
+    'package.json',
+    'dist/index.js',
+    'dist/cli.js',
+    'dist/mcp/stdio.js',
+    'dist/service/server.js',
+    'README.md',
+    'LICENSE',
+    'SECURITY.md',
+    '.env.example',
+    'tests/package-boundary.test.js'
+  ]);
+  assert.deepEqual(result.errors, [
+    'disallowed tarball path: tests/package-boundary.test.js'
+  ]);
+});
+
+test('package-boundary CLI fails closed when pack dry-run parses no files', () => {
+  const result = spawnSync(process.execPath, [
+    path.join(__dirname, '..', 'tools', 'check-package-boundary.js')
+  ], {
+    input: 'Tarball Contents\nTarball Details\n',
+    encoding: 'utf8'
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /no tarball files parsed/i);
 });
 
 test('bill of materials records current package and service evidence', () => {

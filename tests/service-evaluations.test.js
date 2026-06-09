@@ -79,6 +79,38 @@ test('evaluation lifecycle accepts jobs and returns queued then succeeded state'
   }
 });
 
+test('default service reports evaluations as not implemented instead of accepting doomed jobs', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    persistence: false,
+    version: 'contract-test'
+  });
+
+  try {
+    const capabilities = await requestJson(`${service.url}/capabilities`);
+    assert.equal(capabilities.status, 200);
+    assert.equal(capabilities.body.execution.evaluations, false);
+
+    const created = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://example.test' })
+    });
+
+    assert.equal(created.status, 501);
+    assert.deepEqual(created.body, {
+      ok: false,
+      error: {
+        code: 'not_implemented',
+        message: 'Evaluation execution is not available in this service'
+      }
+    });
+  } finally {
+    await service.close();
+  }
+});
+
 test('evaluation lifecycle isolates concurrent jobs and failed state', async () => {
   const { startService } = require('../dist/service/server.js');
   const service = await startService({
@@ -162,5 +194,75 @@ test('evaluation lifecycle returns stable invalid unknown and unfinished envelop
     releaseRunner();
   } finally {
     await service.close();
+  }
+});
+
+test('evaluation creation rejects oversized json bodies', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    jsonBodyLimitBytes: 32,
+    auditRunner: async () => ({ ok: true })
+  });
+
+  try {
+    const response = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://example.test', padding: 'x'.repeat(128) })
+    });
+
+    assert.equal(response.status, 413);
+    assert.deepEqual(response.body, {
+      ok: false,
+      error: {
+        code: 'payload_too_large',
+        message: 'JSON request body exceeds 32 bytes'
+      }
+    });
+  } finally {
+    await service.close();
+  }
+});
+
+test('service close marks active persisted jobs as interrupted before restart', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'slb-drain-'));
+  let service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    artifactRoot,
+    persistence: true,
+    auditRunner: async () => new Promise(() => {})
+  });
+
+  try {
+    const created = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://pending.test' })
+    });
+    await waitForJob(`${service.url}/evaluations/${created.body.id}`, 'running');
+    await service.close();
+
+    service = await startService({
+      host: '127.0.0.1',
+      port: 0,
+      artifactRoot,
+      persistence: true
+    });
+
+    const recovered = await requestJson(`${service.url}/evaluations/${created.body.id}`);
+    assert.equal(recovered.status, 200);
+    assert.equal(recovered.body.job.status, 'failed');
+    assert.deepEqual(recovered.body.job.error, {
+      code: 'evaluation_interrupted',
+      message: 'Evaluation interrupted during service shutdown'
+    });
+  } finally {
+    await service.close();
+    fs.rmSync(artifactRoot, { recursive: true, force: true });
   }
 });

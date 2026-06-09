@@ -130,6 +130,27 @@ test('scheduled audit workflow invokes the built cli artifact directly', () => {
   assert.doesNotMatch(workflow, /pnpm exec stealth-lightbeacon/);
 });
 
+test('ci validates the exact captured pack dry-run evidence', () => {
+  const workflow = readCiWorkflow();
+
+  assert.match(workflow, /mkdir -p \.tmp\/release-evidence/);
+  assert.match(workflow, /pnpm pack --dry-run > \.tmp\/release-evidence\/pack-dry-run\.txt/);
+  assert.match(workflow, /node tools\/check-package-boundary\.js \.tmp\/release-evidence\/pack-dry-run\.txt/);
+});
+
+test('ci captures automated release evidence and leaves human release gates manual', () => {
+  const workflow = readCiWorkflow();
+  const checklist = fs.readFileSync(path.join(__dirname, '..', 'docs', 'publishing-roadmap-checklist.md'), 'utf8');
+
+  assert.match(workflow, /pnpm audit --prod > \.tmp\/release-evidence\/audit-prod\.txt/);
+  assert.match(workflow, /\.tmp\/release-evidence\/secret-scan\.txt/);
+  assert.match(workflow, /\.tmp\/release-evidence\/sbom\.cyclonedx\.json/);
+  assert.doesNotMatch(workflow, /pnpm run release:security:check/);
+  assert.doesNotMatch(workflow, /pnpm run release:dry/);
+  assert.match(checklist, /`MANUAL` `pnpm run release:security:check` verifies completed release evidence locally before publish/);
+  assert.match(checklist, /`MANUAL` `pnpm run release:dry` runs successfully before publish/);
+});
+
 test('package metadata satisfies public publish gate', () => {
   const packageJson = readPackageJson();
 
