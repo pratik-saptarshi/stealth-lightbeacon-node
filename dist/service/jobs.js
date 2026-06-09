@@ -10,6 +10,7 @@ class EvaluationJobStore {
     statePath;
     jobs = new Map();
     sequence = 0;
+    closed = false;
     recoveryError;
     constructor(options = {}) {
         this.auditRunner = options.auditRunner ?? auditRunner_1.defaultAuditRunner;
@@ -33,6 +34,21 @@ class EvaluationJobStore {
         });
         return snapshot(job);
     }
+    close() {
+        this.closed = true;
+        for (const job of this.jobs.values()) {
+            if (job.status === 'queued' || job.status === 'running') {
+                this.update(job, {
+                    status: 'failed',
+                    error: {
+                        code: 'evaluation_interrupted',
+                        message: 'Evaluation interrupted during service shutdown'
+                    }
+                });
+            }
+        }
+        this.persist();
+    }
     get(id) {
         const job = this.jobs.get(id);
         return job ? snapshot(job) : undefined;
@@ -48,6 +64,9 @@ class EvaluationJobStore {
         };
     }
     async run(job) {
+        if (this.closed) {
+            return;
+        }
         this.update(job, { status: 'running' });
         try {
             const result = await this.auditRunner({
@@ -55,11 +74,17 @@ class EvaluationJobStore {
                 targetUrl: job.targetUrl,
                 options: job.options
             });
+            if (this.closed) {
+                return;
+            }
             job.result = result;
             this.update(job, { status: 'succeeded' });
             this.persist();
         }
         catch (error) {
+            if (this.closed) {
+                return;
+            }
             this.update(job, {
                 status: 'failed',
                 error: {

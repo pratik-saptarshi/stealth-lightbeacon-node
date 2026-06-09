@@ -13,6 +13,7 @@ export interface ServiceConfig {
   authToken?: string;
   allowUnsafePublicHttp: boolean;
   allowPrivateRecon: boolean;
+  jsonBodyLimitBytes: number;
   tls?: {
     keyPath: string;
     certPath: string;
@@ -31,6 +32,7 @@ export interface ServiceConfigInput {
   authToken?: unknown;
   allowUnsafePublicHttp?: unknown;
   allowPrivateRecon?: unknown;
+  jsonBodyLimitBytes?: unknown;
   tlsKeyPath?: unknown;
   tlsCertPath?: unknown;
 }
@@ -48,6 +50,7 @@ export function loadServiceConfig(input: ServiceConfigInput = {}): ServiceConfig
     authToken: parseOptionalString(input.authToken),
     allowUnsafePublicHttp: input.allowUnsafePublicHttp === true,
     allowPrivateRecon: input.allowPrivateRecon === true,
+    jsonBodyLimitBytes: parseJsonBodyLimitBytes(input.jsonBodyLimitBytes),
     tls: parseTls(input.tlsKeyPath, input.tlsCertPath)
   };
 }
@@ -72,6 +75,14 @@ function parseArtifactRoot(artifactRoot: unknown): string {
   return typeof artifactRoot === 'string' && artifactRoot.trim()
     ? artifactRoot.trim()
     : 'reports/service-artifacts';
+}
+
+function parseJsonBodyLimitBytes(limit: unknown): number {
+  const parsed = Number(limit ?? 64 * 1024);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return 64 * 1024;
+  }
+  return parsed;
 }
 
 function parseOptionalString(value: unknown): string | undefined {

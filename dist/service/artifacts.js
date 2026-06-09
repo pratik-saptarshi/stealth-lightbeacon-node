@@ -34,15 +34,24 @@ class ArtifactStore {
             return 'invalid';
         }
         try {
-            const stats = (0, node_fs_1.statSync)(artifactPath);
+            const evaluationRealPath = (0, node_fs_1.realpathSync)(evaluationDir);
+            const linkStats = (0, node_fs_1.lstatSync)(artifactPath);
+            if (linkStats.isSymbolicLink()) {
+                return 'invalid';
+            }
+            const realArtifactPath = (0, node_fs_1.realpathSync)(artifactPath);
+            if (!realArtifactPath.startsWith(`${evaluationRealPath}/`)) {
+                return 'invalid';
+            }
+            const stats = (0, node_fs_1.statSync)(realArtifactPath);
             if (!stats.isFile()) {
                 return undefined;
             }
             return {
                 name: rawName,
-                path: artifactPath,
+                path: realArtifactPath,
                 contentType: contentTypeFor(rawName),
-                stream: (0, node_fs_1.createReadStream)(artifactPath)
+                stream: (0, node_fs_1.createReadStream)(realArtifactPath)
             };
         }
         catch {

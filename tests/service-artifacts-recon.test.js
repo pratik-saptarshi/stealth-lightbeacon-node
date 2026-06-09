@@ -115,6 +115,85 @@ test('artifact endpoint rejects traversal and missing artifacts with stable erro
   }
 });
 
+test('direct artifact download requires succeeded evaluation state', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'slb-artifacts-'));
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    artifactRoot,
+    auditRunner: async (request) => {
+      const jobDir = path.join(artifactRoot, request.id);
+      fs.mkdirSync(jobDir, { recursive: true });
+      fs.writeFileSync(path.join(jobDir, 'report.json'), '{}');
+      if (request.targetUrl.includes('fail')) {
+        throw new Error('audit failed');
+      }
+      return new Promise(() => {});
+    }
+  });
+
+  try {
+    const pending = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://pending.test' })
+    });
+    await waitForJob(`${service.url}/evaluations/${pending.body.id}`, 'running');
+
+    const pendingArtifact = await requestJson(`${service.url}/evaluations/${pending.body.id}/artifacts/report.json`);
+    assert.equal(pendingArtifact.status, 409);
+    assert.equal(pendingArtifact.body.error.code, 'result_not_ready');
+
+    const failed = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://fail.test' })
+    });
+    await waitForJob(`${service.url}/evaluations/${failed.body.id}`, 'failed');
+
+    const failedArtifact = await requestJson(`${service.url}/evaluations/${failed.body.id}/artifacts/report.json`);
+    assert.equal(failedArtifact.status, 409);
+    assert.equal(failedArtifact.body.error.code, 'result_not_ready');
+  } finally {
+    await service.close();
+    fs.rmSync(artifactRoot, { recursive: true, force: true });
+  }
+});
+
+test('artifact endpoint rejects symlink escapes outside the evaluation directory', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'slb-artifacts-'));
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'slb-outside-'));
+  const outsideFile = path.join(outsideDir, 'secret.json');
+  fs.writeFileSync(outsideFile, '{"secret":true}');
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    artifactRoot,
+    auditRunner: async (request) => {
+      const jobDir = path.join(artifactRoot, request.id);
+      fs.mkdirSync(jobDir, { recursive: true });
+      fs.symlinkSync(outsideFile, path.join(jobDir, 'report.json'));
+      return { reportPath: path.join(jobDir, 'report.json') };
+    }
+  });
+
+  try {
+    const created = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://example.test' })
+    });
+    await waitForJob(`${service.url}/evaluations/${created.body.id}`, 'succeeded');
+
+    const artifact = await requestJson(`${service.url}/evaluations/${created.body.id}/artifacts/report.json`);
+    assert.equal(artifact.status, 400);
+    assert.equal(artifact.body.error.code, 'invalid_artifact_path');
+  } finally {
+    await service.close();
+    fs.rmSync(artifactRoot, { recursive: true, force: true });
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
 test('recon endpoint validates payload and does not create evaluation side effects', async () => {
   const { startService } = require('../dist/service/server.js');
   let auditCalls = 0;
@@ -155,6 +234,28 @@ test('recon endpoint validates payload and does not create evaluation side effec
     assert.equal(recon.body.recon.recommendedEngine, 'stealth');
     assert.equal(reconCalls, 1);
     assert.equal(auditCalls, 0);
+  } finally {
+    await service.close();
+  }
+});
+
+test('recon endpoint rejects oversized json bodies', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    jsonBodyLimitBytes: 32,
+    reconRunner: async () => ({ ok: true })
+  });
+
+  try {
+    const response = await requestJson(`${service.url}/recon`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://example.test', padding: 'x'.repeat(128) })
+    });
+
+    assert.equal(response.status, 413);
+    assert.equal(response.body.error.code, 'payload_too_large');
   } finally {
     await service.close();
   }

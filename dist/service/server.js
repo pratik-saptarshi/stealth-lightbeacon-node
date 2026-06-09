@@ -70,6 +70,10 @@ async function startService(input = {}) {
     const server = createHttpServer(config.tls, (request, response) => {
         void handleRequest(request, response).catch((error) => {
             if (!response.headersSent) {
+                if (error instanceof PayloadTooLargeError) {
+                    writeJson(response, 413, errorEnvelope('payload_too_large', error.message));
+                    return;
+                }
                 writeJson(response, 500, errorEnvelope('internal_error', error instanceof Error ? error.message : String(error)));
             }
             else {
@@ -117,7 +121,7 @@ async function startService(input = {}) {
                 writeJson(response, 501, errorEnvelope('not_implemented', 'Evaluation execution is not available in this service'));
                 return;
             }
-            const body = await readJsonBody(request);
+            const body = await readJsonBody(request, config.jsonBodyLimitBytes);
             if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
                 writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
                 return;
@@ -158,6 +162,10 @@ async function startService(input = {}) {
                 writeJson(response, 404, errorEnvelope('evaluation_not_found', 'Evaluation not found'));
                 return;
             }
+            if (job.status !== 'succeeded') {
+                writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
+                return;
+            }
             const artifact = artifacts.open(id, decodeURIComponent(evaluationArtifactMatch[2]));
             if (artifact === 'invalid') {
                 writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
@@ -174,7 +182,7 @@ async function startService(input = {}) {
             return;
         }
         if (request.method === 'POST' && path === '/recon') {
-            const body = await readJsonBody(request);
+            const body = await readJsonBody(request, config.jsonBodyLimitBytes);
             if (!body || typeof body.targetUrl !== 'string' || !body.targetUrl.trim()) {
                 writeJson(response, 400, errorEnvelope('invalid_request', 'targetUrl is required'));
                 return;
@@ -246,7 +254,10 @@ async function startService(input = {}) {
             port: address.port
         },
         url: `${config.tls ? 'https' : 'http'}://${config.host}:${address.port}`,
-        close: () => closeServer(server)
+        close: async () => {
+            jobs.close();
+            await closeServer(server);
+        }
     };
 }
 function createHttpServer(tls, listener) {
@@ -287,23 +298,49 @@ function isPublicBindHost(host) {
         normalized === '[::]' ||
         normalized === '';
 }
-function readJsonBody(request) {
-    return new Promise((resolve) => {
+class PayloadTooLargeError extends Error {
+    constructor(limitBytes) {
+        super(`JSON request body exceeds ${limitBytes} bytes`);
+    }
+}
+function readJsonBody(request, limitBytes) {
+    return new Promise((resolve, reject) => {
         const chunks = [];
+        let sizeBytes = 0;
+        let done = false;
         request.on('data', (chunk) => {
+            if (done) {
+                return;
+            }
+            sizeBytes += chunk.length;
+            if (sizeBytes > limitBytes) {
+                done = true;
+                request.pause();
+                reject(new PayloadTooLargeError(limitBytes));
+                return;
+            }
             chunks.push(chunk);
         });
         request.on('end', () => {
+            if (done) {
+                return;
+            }
+            done = true;
             try {
                 const text = Buffer.concat(chunks).toString('utf8');
-                resolve(isRecord(JSON.parse(text)) ? JSON.parse(text) : undefined);
+                const parsed = JSON.parse(text);
+                resolve(isRecord(parsed) ? parsed : undefined);
             }
             catch {
                 resolve(undefined);
             }
         });
-        request.on('error', () => {
-            resolve(undefined);
+        request.on('error', (error) => {
+            if (done) {
+                return;
+            }
+            done = true;
+            reject(error);
         });
     });
 }
