@@ -1,6 +1,6 @@
 # Publishing Readiness Checklist
 
-Use this as the go/no-go gate for pushing a release candidate, tagging, publishing to npm, and monitoring GitHub Actions.
+Use this as the go/no-go gate for pushing a release candidate to `origin/main`, tagging, publishing to npm, and monitoring GitHub Actions.
 
 ## Gate Status Legend
 
@@ -10,17 +10,32 @@ Use this as the go/no-go gate for pushing a release candidate, tagging, publishi
 
 Any unchecked P0 item is a no-go.
 
+Last gate refresh: 2026-06-09.
+
+## Current Gate Evidence — 2026-06-09
+
+- [x] `AUTO` `pnpm run quality:check` passed locally.
+- [x] `AUTO` `pnpm audit --prod` passed locally with no known vulnerabilities.
+- [x] `AUTO` Local secret scan completed with no matches; evidence path `.tmp/release-evidence/secret-scan.txt`.
+- [x] `AUTO` SBOM generated at `.tmp/release-evidence/sbom.cyclonedx.json`.
+- [x] `AUTO` `pnpm pack --dry-run` completed; evidence path `.tmp/release-evidence/pack-dry-run.txt`.
+- [x] `MANUAL` Artifact hygiene reviewed for generated report artifacts, local caches, and tarball allowlist.
+- [x] `MANUAL` Release owner decision: this checklist gates remote-origin push; npm publication still requires npm auth/provenance and post-publish smoke checks.
+- [x] `EVIDENCE` Release evidence is staged under `.tmp/release-evidence/`.
+
 ---
 
 ## A) Branch and Remote Gate
 
 - [ ] `MANUAL` On `main` or an approved `feature/*` release branch.
 - [ ] `AUTO` `git status --short --branch` reviewed; only intentional generated artifacts may be dirty.
-- [ ] `MANUAL` Beads issue for the release/publish slice is claimed and updated.
+- [ ] `AUTO` `bd ready` reviewed and release/publish Beads issue is claimed or closed.
+- [ ] `AUTO` `bd lint` passes.
 - [ ] `MANUAL` Conventional commits exist for each logical change.
 - [ ] `MANUAL` Release branch pushed to `origin`.
 - [ ] `MANUAL` Final checkpoint merged to `main`.
 - [ ] `MANUAL` `main` pushed to `origin`.
+- [ ] `MANUAL` Beads Dolt data pushed with `bd dolt push`.
 
 ## B) Package Metadata Gate
 
@@ -48,7 +63,9 @@ Any unchecked P0 item is a no-go.
 - [ ] `MANUAL` GitHub Dependabot alerts reviewed; no open release-blocking alerts.
 - [ ] `MANUAL` GitHub CodeQL/code-scanning alerts reviewed; no open release-blocking findings.
 - [ ] `MANUAL` GitHub secret-scanning alerts reviewed; no open unresolved secret exposure.
-- [ ] `MANUAL` Secret scan covers repository and packed tarball output before publish.
+- [ ] `AUTO` Local secret-pattern scan covers repository before push:
+  `git grep -n -I -E '(AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9_]{36,}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----)' -- . ':!pnpm-lock.yaml'`.
+- [ ] `MANUAL` Secret scan covers packed tarball output before npm publish.
 - [ ] `MANUAL` `.env.example` contains placeholders only.
 - [ ] `MANUAL` Release evidence redacts API keys, cookies, auth headers, private hostnames, customer data, and proprietary page contents.
 - [ ] `MANUAL` `pnpm run release:security:check` verifies completed release evidence locally before publish; it is not a per-commit CI gate because it requires human-reviewed release decisions and evidence redaction.
@@ -71,6 +88,7 @@ Any unchecked P0 item is a no-go.
 - [ ] `AUTO` `pnpm install --frozen-lockfile`.
 - [ ] `AUTO` `pnpm run build`.
 - [ ] `AUTO` `pnpm run quality:check`.
+- [ ] `AUTO` `node tools/check-coverage.js`.
 - [ ] `AUTO` `pnpm run test:mcp:contract`.
 - [ ] `AUTO` Coverage thresholds pass.
 - [ ] `EVIDENCE` Local gate output and CI run URL captured.
@@ -86,6 +104,7 @@ Any unchecked P0 item is a no-go.
 
 - [ ] `MANUAL` Push to release branch or `main` triggers CI.
 - [ ] `MANUAL` GitHub Actions CI run reaches success.
+- [ ] `MANUAL` CodeQL reaches success for actions, JavaScript/TypeScript, and Rust.
 - [ ] `MANUAL` Scheduled/manual audit workflow uses Node 24 and current `evaluate` CLI syntax.
 - [ ] `MANUAL` Any CodeQL pending state is monitored until resolved or accepted by a documented risk owner.
 

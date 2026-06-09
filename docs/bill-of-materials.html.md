@@ -8,11 +8,15 @@
   <p><strong>Package manager:</strong> <code>pnpm@11.4.0</code></p>
   <p><strong>Node engine:</strong> <code>&gt;=24.0.0</code></p>
   <p><strong>Publish target:</strong> public npm package, global-installable CLI</p>
+  <p><strong>Publishing gate updated:</strong> 2026-06-09</p>
+  <p><strong>Gate owner:</strong> release operator for the current Beads publishing issue</p>
 </section>
 
 ---
 
 ## 1) Publishable Artifacts
+
+This document is the source-of-truth bill of materials for deciding whether the repository is safe to push to `origin/main` and later publish to npm. It inventories publishable package contents, non-publishable repository materials, security/privacy controls, and the evidence required by `docs/publishing-roadmap-checklist.md`.
 
 ### 1.1 Package Entrypoints
 
@@ -47,6 +51,15 @@ The npm tarball must not include:
 - lockfile cache folders, local stores, graph outputs, or integration logs
 - secrets, private hostnames, customer data, screenshots, or generated audit artifacts
 
+Package boundary verification is automated by:
+
+```sh
+pnpm pack --dry-run > .tmp/release-evidence/pack-dry-run.txt
+node tools/check-package-boundary.js .tmp/release-evidence/pack-dry-run.txt
+```
+
+Any package-boundary failure is a publish no-go until corrected.
+
 ### 1.3 Release Metadata
 
 Required public package metadata:
@@ -57,6 +70,22 @@ Required public package metadata:
 - `homepage`: repository README URL
 - `bugs`: GitHub issues URL
 - `publishConfig.access`: `public`
+
+Metadata verification is covered by `tests/package-boundary.test.js` and the CI package-boundary check.
+
+### 1.4 Non-Publishable Repository Materials
+
+The repository intentionally contains development and validation material that must stay out of the npm tarball:
+
+| Area | Examples | Publish handling |
+| --- | --- | --- |
+| Source | `src/**/*.ts`, Rust sources under `src/backend/` | Built to `dist/**/*.js`; source is not in the package allowlist |
+| Tests | `tests/**/*.test.js`, integration tests | Used for CI only; excluded from tarball |
+| Governance | `.beads/`, docs, review state, AGENTS instructions | Versioned in git; excluded from tarball |
+| CI/CD | `.github/`, `.gitlab-ci.yml`, `bitbucket-pipelines.yml` | Versioned in git; excluded from tarball |
+| Desktop subtree | `desktop/` | Out of root npm package scope |
+| Build/cache artifacts | `dist/.tsbuildinfo`, `target/`, `.pnpm-store/`, `.tmp/`, `.cache/` | Must not be intentionally staged for release docs/packaging |
+| Release evidence | `.tmp/release-evidence/*` | Captured for operators; excluded from tarball |
 
 ---
 
@@ -196,11 +225,27 @@ Required public package metadata:
   - private hostnames and internal URLs
   - customer data and proprietary page contents
 
+Required secret/privacy checks before pushing or tagging a release candidate:
+
+```sh
+git grep -n -I -E '(AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9_]{36,}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----)' -- . ':!pnpm-lock.yaml'
+pnpm run release:security:check
+```
+
+The grep check is a local pattern screen, not a substitute for GitHub secret scanning. GitHub secret-scanning alerts must be reviewed manually before npm publication.
+
 ### 4.3 GitHub and CI Controls
 
 - `.github/workflows/ci.yml` uses Node `24.x`, frozen pnpm install, build, and `pnpm run quality:check`.
 - `.github/workflows/stealth-lightbeacon-audit.yml` is an audit workflow and must remain least-privilege.
 - GitHub CodeQL/code scanning, Dependabot alerts, and secret scanning status must be reviewed before publish.
+
+Current remote publishing gate:
+
+- Push target: `origin/main`
+- Required workflow: `.github/workflows/ci.yml`
+- Required code scanning workflow: CodeQL for actions, JavaScript/TypeScript, and Rust
+- Manual review: Dependabot, CodeQL alerts, secret-scanning alerts, and any bypassed branch-protection messages
 
 ---
 
@@ -215,6 +260,8 @@ Required public package metadata:
 - `pnpm audit --prod`
 - `pnpm pack --dry-run`
 - `pnpm run release:dry`
+
+For a repository push gate, `pnpm run quality:check`, `pnpm audit --prod`, `pnpm pack --dry-run`, package-boundary verification, Beads lint/export, and GitHub Actions monitoring are mandatory. `pnpm run release:dry` remains mandatory before npm publication because it exercises release mechanics and changelog generation.
 
 ### 5.1.1 `pnpm pack --dry-run` evidence
 
@@ -251,6 +298,8 @@ Included files must meet these thresholds unless listed in the approved exceptio
 - branch coverage >= `85%`
 - function coverage >= `85%`
 
+The per-file exception registry is intentionally explicit in `tools/check-coverage.js`. Adding a new under-threshold included file without adding it to the registry fails the gate.
+
 ### 5.3 Release Automation
 
 - Release wrapper: `tools/release.sh`
@@ -273,3 +322,30 @@ Publishing is allowed only when all gates in `docs/publishing-roadmap-checklist.
 7. Post-publish smoke gate
 
 Any failed gate is a no-go. Do not tag or publish until the gate is resolved or explicitly accepted with a documented risk owner.
+
+---
+
+## 7) Current Publishing Gate Checklist
+
+Treat this checklist as the compact go/no-go summary for pushing `main` to `origin` from this repository.
+
+| Gate | Evidence | Status rule |
+| --- | --- | --- |
+| Branch and tracker | `git status --short --branch`, `bd ready`, claimed/closed Beads issue | Must show only intentional generated dirt and no untracked release artifacts |
+| Package metadata | `package.json`, `tests/package-boundary.test.js` | Metadata must match npm public package expectations |
+| Tarball boundary | `pnpm pack --dry-run`, `node tools/check-package-boundary.js ...` | Tarball must contain only allowlisted package files |
+| Security audit | `pnpm audit --prod` | No production dependency advisory can remain unresolved |
+| Secret scan | local grep screen plus GitHub secret-scanning review | No unresolved secret exposure |
+| Privacy review | README/SECURITY/BOM release evidence redaction guidance | No private URLs, credentials, cookies, customer data, or proprietary page contents in docs/evidence |
+| Quality | `pnpm run quality:check`, `node tools/check-coverage.js`, `bd lint` | All must pass |
+| Release dry run | `pnpm run release:dry` | Required before npm publication; failures block npm publish |
+| Remote publish | `git push origin main --follow-tags` | Push must succeed and leave local `main` synced |
+| CI monitor | `gh run list --branch main`, `gh run view ...` | CI and CodeQL must complete successfully |
+
+If any automated gate cannot run because of network or credential access, record it as a no-go unless a release owner explicitly accepts the risk in release notes.
+
+### 7.1 Current Evidence Notes
+
+- Local SBOM evidence was generated with `pnpm dlx @cyclonedx/cdxgen -t npm -o .tmp/release-evidence/sbom.cyclonedx.json`.
+- The SBOM generator reported a local secure-mode warning because `NODE_PATH` was set in the operator environment; the generated SBOM file is still valid CycloneDX evidence.
+- CI regenerates release evidence independently on `origin/main`; the pushed run must be monitored to success before treating the remote publishing gate as closed.
