@@ -27,6 +27,13 @@ const REQUIRED_EVIDENCE_FILES = [
   '.tmp/release-evidence/pack-dry-run.txt'
 ];
 
+const REQUIRED_PACKAGE_SCRIPTS = {
+  'quality:check': null,
+  'audit:signatures': 'pnpm audit --prod',
+  'pack:dry': 'pnpm pack --dry-run',
+  'release:dry': './tools/release.sh --dry-run --ci'
+};
+
 function hasCheckedChecklistItem(checklist, pattern) {
   return checklist
     .split(/\r?\n/)
@@ -69,9 +76,13 @@ function validateReleaseSecurityGate(input) {
   }
 
   const scripts = packageJson.scripts ?? {};
-  for (const script of ['quality:check', 'audit:signatures', 'pack:dry', 'release:dry']) {
+  for (const [script, expectedCommand] of Object.entries(REQUIRED_PACKAGE_SCRIPTS)) {
     if (!Object.hasOwn(scripts, script)) {
       errors.push(`missing package script: ${script}`);
+      continue;
+    }
+    if (expectedCommand !== null && scripts[script] !== expectedCommand) {
+      errors.push(`invalid package script: ${script}`);
     }
   }
 

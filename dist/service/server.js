@@ -90,7 +90,24 @@ async function startService(input = {}) {
                 version: config.version,
                 uptimeMs: Math.max(0, config.clock() - startedAt),
                 persistence: { enabled: config.persistence },
-                ...(jobs.recoveryError ? { recovery: { ok: false, error: jobs.recoveryError } } : {})
+                ...(jobs.recoveryError ? { recovery: { ok: false } } : {})
+            });
+            return;
+        }
+        if (request.method === 'GET' && path === '/health/recovery') {
+            if (!config.authToken) {
+                writeJson(response, 404, errorEnvelope('not_found', 'Route not found'));
+                return;
+            }
+            if (!isAuthorized(request, config.authToken)) {
+                writeJson(response, 401, errorEnvelope('unauthorized', 'Bearer token is required'));
+                return;
+            }
+            writeJson(response, 200, {
+                ok: !jobs.recoveryError,
+                recovery: jobs.recoveryError
+                    ? { ok: false, error: jobs.recoveryError }
+                    : { ok: true }
             });
             return;
         }

@@ -29,9 +29,9 @@ const requiredBom = [
 const packageJsonWithReleaseScripts = {
   scripts: {
     'quality:check': 'ok',
-    'audit:signatures': 'ok',
-    'pack:dry': 'ok',
-    'release:dry': 'ok'
+    'audit:signatures': 'pnpm audit --prod',
+    'pack:dry': 'pnpm pack --dry-run',
+    'release:dry': './tools/release.sh --dry-run --ci'
   }
 };
 
@@ -57,6 +57,25 @@ test('release security gate fails with actionable missing evidence', () => {
   assert.ok(result.errors.includes('missing checklist gate: sbom'));
   assert.ok(result.errors.includes('missing BOM evidence path: sbom-evidence'));
   assert.ok(result.errors.includes('missing package script: audit:signatures'));
+});
+
+test('release security gate fails when release scripts use placeholders or wrong commands', () => {
+  const result = validateReleaseSecurityGate({
+    checklist: '',
+    bom: '',
+    packageJson: {
+      scripts: {
+        'quality:check': 'ok',
+        'audit:signatures': 'pnpm audit',
+        'pack:dry': 'ok',
+        'release:dry': './tools/release.sh'
+      }
+    }
+  });
+
+  assert.ok(result.errors.includes('invalid package script: audit:signatures'));
+  assert.ok(result.errors.includes('invalid package script: pack:dry'));
+  assert.ok(result.errors.includes('invalid package script: release:dry'));
 });
 
 test('release security gate fails when required checklist items are unchecked', (t) => {

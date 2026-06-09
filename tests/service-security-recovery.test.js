@@ -174,11 +174,46 @@ test('corrupted recovered state degrades health and bounds endpoint errors', asy
     assert.equal(health.status, 200);
     assert.equal(health.body.ok, false);
     assert.equal(health.body.status, 'degraded');
-    assert.equal(health.body.recovery.error.code, 'state_recovery_failed');
+    assert.deepEqual(health.body.recovery, { ok: false });
 
     const missing = await requestJson(`${service.url}/evaluations/eval-000001`);
     assert.equal(missing.status, 404);
     assert.equal(missing.body.error.code, 'evaluation_not_found');
+  } finally {
+    await service.close();
+    fs.rmSync(artifactRoot, { recursive: true, force: true });
+  }
+});
+
+test('recovery diagnostics require an authenticated explicit health route', async () => {
+  const { startService } = require('../dist/service/server.js');
+  const artifactRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'slb-recovery-'));
+  fs.mkdirSync(artifactRoot, { recursive: true });
+  fs.writeFileSync(path.join(artifactRoot, 'jobs.json'), '{corrupt');
+
+  const service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    artifactRoot,
+    persistence: true,
+    authToken: 'secret-token'
+  });
+
+  try {
+    const publicHealth = await requestJson(`${service.url}/health`);
+    assert.equal(publicHealth.status, 200);
+    assert.deepEqual(publicHealth.body.recovery, { ok: false });
+
+    const unauthorized = await requestJson(`${service.url}/health/recovery`);
+    assert.equal(unauthorized.status, 401);
+
+    const diagnostics = await requestJson(`${service.url}/health/recovery`, {
+      headers: { authorization: 'Bearer secret-token' }
+    });
+    assert.equal(diagnostics.status, 200);
+    assert.equal(diagnostics.body.ok, false);
+    assert.equal(diagnostics.body.recovery.error.code, 'state_recovery_failed');
+    assert.match(diagnostics.body.recovery.error.message, /Unexpected token|JSON/);
   } finally {
     await service.close();
     fs.rmSync(artifactRoot, { recursive: true, force: true });

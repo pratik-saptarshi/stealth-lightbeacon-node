@@ -13,6 +13,19 @@ function readPackageJson() {
   return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 }
 
+test('package-boundary validator reads expected files and bin from external policy data', () => {
+  const packageJson = readPackageJson();
+  const policyPath = path.join(__dirname, '..', 'tools', 'package-boundary-policy.json');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'check-package-boundary.js'), 'utf8');
+  const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+
+  assert.equal(policy.version, 1);
+  assert.deepEqual(packageJson.files, policy.files);
+  assert.deepEqual(packageJson.bin, policy.bin);
+  assert.doesNotMatch(source, /const\s+EXPECTED_FILES\s*=\s*\[/);
+  assert.doesNotMatch(source, /const\s+EXPECTED_BIN\s*=\s*\{/);
+});
+
 test('package.json declares a runtime-only tarball boundary and bin policy', () => {
   const packageJson = readPackageJson();
   const result = validatePackageBoundary({

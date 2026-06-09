@@ -4,21 +4,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const EXPECTED_FILES = [
-  'dist/**/*.js',
-  'README.md',
-  'readme.md',
-  'LICENSE',
-  'SECURITY.md',
-  '.env.example'
-];
-
-const EXPECTED_BIN = {
-  'stealth-lightbeacon': 'dist/cli.js',
-  'stealth-lightbeacon-mcp': 'dist/mcp/stdio.js'
-};
-
+const DEFAULT_POLICY_PATH = path.join(__dirname, 'package-boundary-policy.json');
 const ALWAYS_INCLUDED = new Set(['package.json']);
+
+function loadPackageBoundaryPolicy(policyPath = DEFAULT_POLICY_PATH) {
+  return JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+}
 
 function normalizePackPath(filePath) {
   return filePath
@@ -112,18 +103,19 @@ function isDisallowedArtifact(filePath) {
 
 function validatePackageBoundary({ packageJson, files }) {
   const errors = [];
+  const policy = loadPackageBoundaryPolicy();
   const packageFiles = Array.isArray(packageJson.files) ? packageJson.files : [];
 
   if (!Array.isArray(files) || files.length === 0) {
     errors.push('no tarball files parsed from pack dry-run output');
   }
 
-  if (!arraysEqual(packageJson.files, EXPECTED_FILES)) {
-    errors.push(`package.json files must equal ${JSON.stringify(EXPECTED_FILES)}`);
+  if (!arraysEqual(packageJson.files, policy.files)) {
+    errors.push(`package.json files must equal ${JSON.stringify(policy.files)}`);
   }
 
-  if (!objectsEqual(packageJson.bin, EXPECTED_BIN)) {
-    errors.push(`package.json bin must equal ${JSON.stringify(EXPECTED_BIN)}`);
+  if (!objectsEqual(packageJson.bin, policy.bin)) {
+    errors.push(`package.json bin must equal ${JSON.stringify(policy.bin)}`);
   }
 
   for (const [binName, binPath] of Object.entries(packageJson.bin || {})) {
@@ -164,6 +156,7 @@ function main() {
 }
 
 module.exports = {
+  loadPackageBoundaryPolicy,
   parsePackDryRunFiles,
   validatePackageBoundary
 };
