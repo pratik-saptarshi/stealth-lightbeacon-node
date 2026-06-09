@@ -3,6 +3,7 @@ import * as https from 'node:https';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { listDefaultEvaluatorPlugins } from '../core/defaultEvaluators';
+import { SUPPORTED_AUDIT_ENGINES, SUPPORTED_REPORT_FORMATS } from '../core/config';
 import { ArtifactStore } from './artifacts';
 import { loadServiceConfig, type ServiceConfig, type ServiceConfigInput } from './config';
 import { EvaluationJobStore } from './jobs';
@@ -17,8 +18,6 @@ export interface StartedService {
   close(): Promise<void>;
 }
 
-const ENGINES = ['http', 'rendered', 'fast', 'stealth'] as const;
-const FORMATS = ['json', 'html', 'both', 'llm', 'geo-xml'] as const;
 const ENDPOINTS = [
   '/health',
   '/capabilities',
@@ -100,8 +99,8 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
     if (request.method === 'GET' && path === '/capabilities') {
       writeJson(response, 200, {
         ok: true,
-        engines: [...ENGINES],
-        formats: [...FORMATS],
+        engines: [...SUPPORTED_AUDIT_ENGINES],
+        formats: [...SUPPORTED_REPORT_FORMATS],
         evaluators: listDefaultEvaluatorPlugins().map((plugin) => plugin.id),
         endpoints: [...ENDPOINTS],
         security: {
@@ -169,7 +168,12 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
         writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
         return;
       }
-      const artifact = artifacts.open(id, decodeURIComponent(evaluationArtifactMatch[2]));
+      const artifactName = decodeArtifactName(evaluationArtifactMatch[2]);
+      if (!artifactName) {
+        writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
+        return;
+      }
+      const artifact = artifacts.open(id, artifactName);
       if (artifact === 'invalid') {
         writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
         return;
@@ -264,7 +268,7 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
     },
     url: `${config.tls ? 'https' : 'http'}://${config.host}:${address.port}`,
     close: async () => {
-      jobs.close();
+      await jobs.close();
       await closeServer(server);
     }
   };
@@ -371,6 +375,14 @@ function errorEnvelope(code: string, message: string): { ok: false; error: { cod
       message
     }
   };
+}
+
+function decodeArtifactName(rawName: string): string | undefined {
+  try {
+    return decodeURIComponent(rawName);
+  } catch {
+    return undefined;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -21,6 +21,7 @@ export interface EvaluationJobStoreOptions {
   auditRunner?: AuditRunner;
   clock?: () => number;
   statePath?: string;
+  shutdownDrainTimeoutMs?: number;
 }
 
 interface EvaluationJob extends EvaluationJobSnapshot {
@@ -31,7 +32,10 @@ export class EvaluationJobStore {
   private readonly auditRunner: AuditRunner;
   private readonly clock: () => number;
   private readonly statePath?: string;
+  private readonly shutdownDrainTimeoutMs: number;
   private readonly jobs = new Map<string, EvaluationJob>();
+  private readonly activeRuns = new Map<string, Promise<void>>();
+  private readonly activeControllers = new Map<string, AbortController>();
   private sequence = 0;
   private closed = false;
   readonly recoveryError?: {
@@ -43,6 +47,7 @@ export class EvaluationJobStore {
     this.auditRunner = options.auditRunner ?? defaultAuditRunner;
     this.clock = options.clock ?? (() => Date.now());
     this.statePath = options.statePath;
+    this.shutdownDrainTimeoutMs = options.shutdownDrainTimeoutMs ?? 250;
     this.recoveryError = this.load();
   }
 
@@ -58,12 +63,16 @@ export class EvaluationJobStore {
     };
     this.jobs.set(job.id, job);
     queueMicrotask(() => {
-      void this.run(job);
+      const run = this.run(job);
+      this.activeRuns.set(job.id, run);
+      void run.finally(() => {
+        this.activeRuns.delete(job.id);
+      });
     });
     return snapshot(job);
   }
 
-  close(): void {
+  async close(): Promise<void> {
     this.closed = true;
     for (const job of this.jobs.values()) {
       if (job.status === 'queued' || job.status === 'running') {
@@ -76,7 +85,11 @@ export class EvaluationJobStore {
         });
       }
     }
+    for (const controller of this.activeControllers.values()) {
+      controller.abort();
+    }
     this.persist();
+    await this.drainActiveRuns();
   }
 
   get(id: string): EvaluationJobSnapshot | undefined {
@@ -99,12 +112,15 @@ export class EvaluationJobStore {
     if (this.closed) {
       return;
     }
+    const controller = new AbortController();
+    this.activeControllers.set(job.id, controller);
     this.update(job, { status: 'running' });
     try {
       const result = await this.auditRunner({
         id: job.id,
         targetUrl: job.targetUrl,
-        options: job.options
+        options: job.options,
+        signal: controller.signal
       });
       if (this.closed) {
         return;
@@ -124,7 +140,20 @@ export class EvaluationJobStore {
         }
       });
       this.persist();
+    } finally {
+      this.activeControllers.delete(job.id);
     }
+  }
+
+  private async drainActiveRuns(): Promise<void> {
+    const activeRuns = Array.from(this.activeRuns.values());
+    if (activeRuns.length === 0) {
+      return;
+    }
+    await Promise.race([
+      Promise.allSettled(activeRuns),
+      new Promise((resolve) => setTimeout(resolve, this.shutdownDrainTimeoutMs))
+    ]);
   }
 
   private update(job: EvaluationJob, changes: Partial<EvaluationJob>): void {

@@ -35,12 +35,19 @@ const packageJsonWithReleaseScripts = {
   }
 };
 
+const validCycloneDxSbom = {
+  bomFormat: 'CycloneDX',
+  specVersion: '1.6',
+  components: []
+};
+
 function createEvidenceFixture(t) {
   const tempDir = fs.mkdtempSync(path.join(__dirname, 'release-evidence-'));
   t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
   const evidenceDir = path.join(tempDir, '.tmp', 'release-evidence');
   fs.mkdirSync(evidenceDir, { recursive: true });
-  for (const file of ['sbom.cyclonedx.json', 'secret-scan.txt', 'audit-prod.txt', 'pack-dry-run.txt']) {
+  fs.writeFileSync(path.join(evidenceDir, 'sbom.cyclonedx.json'), JSON.stringify(validCycloneDxSbom));
+  for (const file of ['secret-scan.txt', 'audit-prod.txt', 'pack-dry-run.txt']) {
     fs.writeFileSync(path.join(evidenceDir, file), 'captured\n');
   }
   return tempDir;
@@ -102,6 +109,54 @@ test('release security gate fails when required evidence files are missing', (t)
   });
 
   assert.ok(result.errors.includes('missing evidence file: .tmp/release-evidence/sbom.cyclonedx.json'));
+});
+
+test('release security gate fails when SBOM evidence is not CycloneDX or SPDX', (t) => {
+  const evidenceRoot = createEvidenceFixture(t);
+  fs.writeFileSync(
+    path.join(evidenceRoot, '.tmp', 'release-evidence', 'sbom.cyclonedx.json'),
+    JSON.stringify({ dependencies: [] })
+  );
+
+  const result = validateReleaseSecurityGate({
+    checklist: requiredChecklist,
+    bom: requiredBom,
+    packageJson: packageJsonWithReleaseScripts,
+    evidenceRoot
+  });
+
+  assert.ok(result.errors.includes('invalid SBOM evidence: .tmp/release-evidence/sbom.cyclonedx.json'));
+});
+
+test('release security gate accepts SPDX SBOM evidence', (t) => {
+  const evidenceRoot = createEvidenceFixture(t);
+  fs.writeFileSync(
+    path.join(evidenceRoot, '.tmp', 'release-evidence', 'sbom.cyclonedx.json'),
+    JSON.stringify({ spdxVersion: 'SPDX-2.3', SPDXID: 'SPDXRef-DOCUMENT', packages: [] })
+  );
+
+  const result = validateReleaseSecurityGate({
+    checklist: requiredChecklist,
+    bom: requiredBom,
+    packageJson: packageJsonWithReleaseScripts,
+    evidenceRoot
+  });
+
+  assert.deepEqual(result.errors, []);
+});
+
+test('release security gate fails when SBOM evidence is not JSON', (t) => {
+  const evidenceRoot = createEvidenceFixture(t);
+  fs.writeFileSync(path.join(evidenceRoot, '.tmp', 'release-evidence', 'sbom.cyclonedx.json'), 'captured\n');
+
+  const result = validateReleaseSecurityGate({
+    checklist: requiredChecklist,
+    bom: requiredBom,
+    packageJson: packageJsonWithReleaseScripts,
+    evidenceRoot
+  });
+
+  assert.ok(result.errors.includes('invalid SBOM evidence: .tmp/release-evidence/sbom.cyclonedx.json'));
 });
 
 test('release security gate passes when checklist is complete and evidence files exist', (t) => {

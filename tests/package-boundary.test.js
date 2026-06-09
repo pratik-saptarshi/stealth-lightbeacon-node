@@ -180,4 +180,6 @@ test('bill of materials records current package and service evidence', () => {
   ]) {
     assert.match(bom, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+  assert.match(bom, /No `preinstall` hook blocks npm global install/);
+  assert.doesNotMatch(bom, /preinstall` rejects non-pnpm/i);
 });

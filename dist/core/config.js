@@ -1,10 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.engineSchema = exports.reportFormatSchema = void 0;
+exports.SUPPORTED_AUDIT_ENGINES = exports.SUPPORTED_REPORT_FORMATS = exports.engineSchema = exports.reportFormatSchema = void 0;
 exports.loadRuntimeOptions = loadRuntimeOptions;
 const zod_1 = require("zod");
 exports.reportFormatSchema = zod_1.z.enum(['json', 'html', 'both', 'llm', 'geo-xml']);
 exports.engineSchema = zod_1.z.enum(['http', 'rendered', 'fast', 'stealth']);
+exports.SUPPORTED_REPORT_FORMATS = exports.reportFormatSchema.options;
+exports.SUPPORTED_AUDIT_ENGINES = exports.engineSchema.options;
 const runtimeOptionsSchema = zod_1.z.object({
     outputDir: zod_1.z.string().default('.'),
     format: exports.reportFormatSchema.default('both'),

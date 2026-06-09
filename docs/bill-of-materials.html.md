@@ -172,7 +172,7 @@ Required public package metadata:
 - Root lockfile: `pnpm-lock.yaml`
 - Package manager pin: `packageManager: pnpm@11.4.0`
 - `.npmrc` forces `/bin/sh` for package scripts and disables package-manager auto-version management.
-- `preinstall` rejects non-pnpm installs for repository development.
+- No `preinstall` hook blocks npm global install; pnpm remains required for repository development and CI.
 
 ---
 

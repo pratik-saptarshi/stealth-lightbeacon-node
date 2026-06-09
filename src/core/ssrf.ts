@@ -5,33 +5,72 @@ import * as https from 'node:https';
 import * as net from 'node:net';
 import * as tls from 'node:tls';
 
-const IPV4_PRIVATE_RANGES = [
+const IPV4_NON_GLOBAL_RANGES = [
+  { start: '0.0.0.0', end: '0.255.255.255' },
   { start: '10.0.0.0', end: '10.255.255.255' },
+  { start: '100.64.0.0', end: '100.127.255.255' },
   { start: '127.0.0.0', end: '127.255.255.255' },
   { start: '169.254.0.0', end: '169.254.255.255' },
   { start: '172.16.0.0', end: '172.31.255.255' },
-  { start: '192.168.0.0', end: '192.168.255.255' }
+  { start: '192.0.0.0', end: '192.0.0.255' },
+  { start: '192.0.2.0', end: '192.0.2.255' },
+  { start: '192.88.99.0', end: '192.88.99.255' },
+  { start: '192.168.0.0', end: '192.168.255.255' },
+  { start: '198.18.0.0', end: '198.19.255.255' },
+  { start: '198.51.100.0', end: '198.51.100.255' },
+  { start: '203.0.113.0', end: '203.0.113.255' },
+  { start: '224.0.0.0', end: '239.255.255.255' },
+  { start: '240.0.0.0', end: '255.255.255.255' }
 ] as const;
 
 function ipv4ToInt(ipAddress: string): number {
-  return ipAddress.split('.').reduce((value, part) => (value << 8) + Number(part), 0);
+  return ipAddress.split('.').reduce((value, part) => ((value << 8) + Number(part)) >>> 0, 0);
 }
 
 function isPrivateIpv4(ipAddress: string): boolean {
   const value = ipv4ToInt(ipAddress);
-  return IPV4_PRIVATE_RANGES.some((range) => {
+  return IPV4_NON_GLOBAL_RANGES.some((range) => {
     return value >= ipv4ToInt(range.start) && value <= ipv4ToInt(range.end);
   });
 }
 
+const IPV6_NON_GLOBAL_RANGES = [
+  { start: '::', end: '::' },
+  { start: '::1', end: '::1' },
+  { start: '::ffff:0:0', end: '::ffff:ffff:ffff' },
+  { start: '64:ff9b:1::', end: '64:ff9b:1:ffff:ffff:ffff:ffff:ffff' },
+  { start: '100::', end: '100::ffff:ffff:ffff:ffff' },
+  { start: '2001::', end: '2001:1ff:ffff:ffff:ffff:ffff:ffff:ffff' },
+  { start: '2001:2::', end: '2001:2:0:ffff:ffff:ffff:ffff:ffff' },
+  { start: '2001:db8::', end: '2001:db8:ffff:ffff:ffff:ffff:ffff:ffff' },
+  { start: '2002::', end: '2002:ffff:ffff:ffff:ffff:ffff:ffff:ffff' },
+  { start: 'fc00::', end: 'fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff' },
+  { start: 'fe80::', end: 'febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff' },
+  { start: 'ff00::', end: 'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff' }
+] as const;
+
+function expandIpv6Parts(ipAddress: string): number[] {
+  const ipv4Match = ipAddress.match(/(.+:)(\d+\.\d+\.\d+\.\d+)$/);
+  const normalized = ipv4Match
+    ? `${ipv4Match[1]}${(ipv4ToInt(ipv4Match[2]) >>> 16).toString(16)}:${(ipv4ToInt(ipv4Match[2]) & 0xffff).toString(16)}`
+    : ipAddress;
+  const [head, tail = ''] = normalized.toLowerCase().split('::');
+  const headParts = head ? head.split(':').map((part) => Number.parseInt(part, 16)) : [];
+  const tailParts = tail ? tail.split(':').map((part) => Number.parseInt(part, 16)) : [];
+  const fillParts = new Array(8 - headParts.length - tailParts.length).fill(0);
+
+  return [...headParts, ...fillParts, ...tailParts];
+}
+
+function ipv6ToBigInt(ipAddress: string): bigint {
+  return expandIpv6Parts(ipAddress).reduce((value, part) => (value << 16n) + BigInt(part), 0n);
+}
+
 function isPrivateIpv6(ipAddress: string): boolean {
-  const normalized = ipAddress.toLowerCase();
-  return (
-    normalized === '::1' ||
-    normalized.startsWith('fc') ||
-    normalized.startsWith('fd') ||
-    normalized.startsWith('fe80:')
-  );
+  const value = ipv6ToBigInt(ipAddress);
+  return IPV6_NON_GLOBAL_RANGES.some((range) => {
+    return value >= ipv6ToBigInt(range.start) && value <= ipv6ToBigInt(range.end);
+  });
 }
 
 export class SSRFViolationError extends Error {}

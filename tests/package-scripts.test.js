@@ -25,6 +25,17 @@ function readAuditWorkflow() {
   return fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'stealth-lightbeacon-audit.yml'), 'utf8');
 }
 
+function readReleaseScript() {
+  return fs.readFileSync(path.join(__dirname, '..', 'tools', 'release.sh'), 'utf8');
+}
+
+function readAlternateCiConfigs() {
+  return {
+    '.gitlab-ci.yml': fs.readFileSync(path.join(__dirname, '..', '.gitlab-ci.yml'), 'utf8'),
+    'bitbucket-pipelines.yml': fs.readFileSync(path.join(__dirname, '..', 'bitbucket-pipelines.yml'), 'utf8')
+  };
+}
+
 test('non-interactive quality gates invoke tools directly without nested pnpm run', () => {
   const scripts = readScripts();
 
@@ -94,6 +105,26 @@ test('all github workflow node versions satisfy package engine policy', () => {
   }
 });
 
+test('alternate ci configs satisfy node and pnpm policy or stay absent', () => {
+  const packageJson = readPackageJson();
+  const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
+  const pnpmVersion = packageJson.packageManager.match(/^pnpm@(.+)$/)?.[1];
+  assert.ok(Number.isInteger(minimumMajor), `Unsupported node engine range: ${packageJson.engines.node}`);
+  assert.match(pnpmVersion ?? '', /^\d+\.\d+\.\d+$/);
+
+  for (const [configName, config] of Object.entries(readAlternateCiConfigs())) {
+    const imageMatch = config.match(/image:\s*node:(\d+)/);
+    assert.ok(imageMatch, `${configName} must declare an active Node image`);
+    assert.ok(
+      Number(imageMatch[1]) >= minimumMajor,
+      `${configName} image node:${imageMatch[1]} does not satisfy ${packageJson.engines.node}`
+    );
+    assert.match(config, new RegExp(`corepack prepare pnpm@${pnpmVersion.replaceAll('.', '\\.')} --activate`));
+    assert.match(config, /pnpm install --frozen-lockfile/);
+    assert.doesNotMatch(config, /\bnpm ci\b/);
+  }
+});
+
 test('github workflows install pnpm before setup-node cache uses it', () => {
   const workflows = {
     'ci.yml': readCiWorkflow(),
@@ -145,10 +176,25 @@ test('ci captures automated release evidence and leaves human release gates manu
   assert.match(workflow, /pnpm audit --prod > \.tmp\/release-evidence\/audit-prod\.txt/);
   assert.match(workflow, /\.tmp\/release-evidence\/secret-scan\.txt/);
   assert.match(workflow, /\.tmp\/release-evidence\/sbom\.cyclonedx\.json/);
+  assert.match(workflow, /pnpm dlx @cyclonedx\/cdxgen/);
+  assert.doesNotMatch(workflow, /pnpm list --prod --json > \.tmp\/release-evidence\/sbom\.cyclonedx\.json/);
   assert.doesNotMatch(workflow, /pnpm run release:security:check/);
   assert.doesNotMatch(workflow, /pnpm run release:dry/);
   assert.match(checklist, /`MANUAL` `pnpm run release:security:check` verifies completed release evidence locally before publish/);
   assert.match(checklist, /`MANUAL` `pnpm run release:dry` runs successfully before publish/);
+});
+
+test('production release wrapper enforces release security gate before release-it', () => {
+  const releaseScript = readReleaseScript();
+  const qualityIndex = releaseScript.indexOf('pnpm run quality:check');
+  const securityIndex = releaseScript.indexOf('pnpm run release:security:check');
+  const releaseItIndex = releaseScript.indexOf('pnpm exec release-it');
+
+  assert.notEqual(qualityIndex, -1);
+  assert.notEqual(securityIndex, -1);
+  assert.notEqual(releaseItIndex, -1);
+  assert.ok(qualityIndex < securityIndex);
+  assert.ok(securityIndex < releaseItIndex);
 });
 
 test('package metadata satisfies public publish gate', () => {

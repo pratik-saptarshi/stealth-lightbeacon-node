@@ -40,6 +40,7 @@ test('service starts on an ephemeral port and returns health contract', async ()
 
 test('service exposes stable capabilities contract and json error envelope', async () => {
   const { startService } = require('../dist/service/server.js');
+  const { SUPPORTED_AUDIT_ENGINES, SUPPORTED_REPORT_FORMATS } = require('../dist/core/config.js');
   const service = await startService({
     host: '127.0.0.1',
     port: 0,
@@ -51,8 +52,8 @@ test('service exposes stable capabilities contract and json error envelope', asy
     const capabilities = await readJson(`${service.url}/capabilities`);
     assert.equal(capabilities.status, 200);
     assert.equal(capabilities.body.ok, true);
-    assert.deepEqual(capabilities.body.engines, ['http', 'rendered', 'fast', 'stealth']);
-    assert.deepEqual(capabilities.body.formats, ['json', 'html', 'both', 'llm', 'geo-xml']);
+    assert.deepEqual(capabilities.body.engines, SUPPORTED_AUDIT_ENGINES);
+    assert.deepEqual(capabilities.body.formats, SUPPORTED_REPORT_FORMATS);
     assert.ok(capabilities.body.evaluators.includes('seo'));
     assert.deepEqual(capabilities.body.endpoints, [
       '/health',

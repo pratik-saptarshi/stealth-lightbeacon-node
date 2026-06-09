@@ -27,6 +27,8 @@ const REQUIRED_EVIDENCE_FILES = [
   '.tmp/release-evidence/pack-dry-run.txt'
 ];
 
+const SBOM_EVIDENCE_FILE = '.tmp/release-evidence/sbom.cyclonedx.json';
+
 const REQUIRED_PACKAGE_SCRIPTS = {
   'quality:check': null,
   'audit:signatures': 'pnpm audit --prod',
@@ -38,6 +40,24 @@ function hasCheckedChecklistItem(checklist, pattern) {
   return checklist
     .split(/\r?\n/)
     .some((line) => /^-\s+\[[xX]\]/.test(line) && pattern.test(line));
+}
+
+function hasValidSbomShape(sbom) {
+  if (sbom === null || typeof sbom !== 'object' || Array.isArray(sbom)) {
+    return false;
+  }
+
+  const isCycloneDx =
+    sbom.bomFormat === 'CycloneDX' &&
+    typeof sbom.specVersion === 'string' &&
+    Array.isArray(sbom.components);
+
+  const isSpdx =
+    typeof sbom.spdxVersion === 'string' &&
+    typeof sbom.SPDXID === 'string' &&
+    Array.isArray(sbom.packages);
+
+  return isCycloneDx || isSpdx;
 }
 
 function validateReleaseSecurityGate(input) {
@@ -72,6 +92,18 @@ function validateReleaseSecurityGate(input) {
     }
     if (fs.statSync(filePath).size === 0) {
       errors.push(`empty evidence file: ${file}`);
+    }
+  }
+
+  const sbomPath = path.join(evidenceRoot, SBOM_EVIDENCE_FILE);
+  if (fs.existsSync(sbomPath) && fs.statSync(sbomPath).size > 0) {
+    try {
+      const sbom = JSON.parse(fs.readFileSync(sbomPath, 'utf8'));
+      if (!hasValidSbomShape(sbom)) {
+        errors.push(`invalid SBOM evidence: ${SBOM_EVIDENCE_FILE}`);
+      }
+    } catch {
+      errors.push(`invalid SBOM evidence: ${SBOM_EVIDENCE_FILE}`);
     }
   }
 

@@ -106,6 +106,16 @@ test('artifact endpoint rejects traversal and missing artifacts with stable erro
       }
     });
 
+    const malformed = await requestJson(`${service.url}/evaluations/${created.body.id}/artifacts/%E0%A4%A`);
+    assert.equal(malformed.status, 400);
+    assert.deepEqual(malformed.body, {
+      ok: false,
+      error: {
+        code: 'invalid_artifact_path',
+        message: 'Artifact path is invalid'
+      }
+    });
+
     const missing = await requestJson(`${service.url}/evaluations/${created.body.id}/artifacts/missing.json`);
     assert.equal(missing.status, 404);
     assert.equal(missing.body.error.code, 'artifact_not_found');

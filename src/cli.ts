@@ -19,6 +19,7 @@ import { startService, type StartedService } from './service/server';
 
 const DEFAULT_OUTPUT_DIR = 'reports';
 const DEFAULT_SEARCH_LIMIT = 10;
+const PACKAGE_VERSION = loadPackageVersion();
 
 interface SearchSemanticOptions {
   createStore?: (options: OntologyStoreOptions) => Promise<Pick<OntologyStore, 'close' | 'search'>>;
@@ -64,7 +65,7 @@ export async function main(): Promise<void> {
   program
     .name('stealth-lightbeacon')
     .description('TypeScript crawl orchestration and multi-domain site auditing CLI with security checks, SEO, AEO, GEO, and performance reporting.')
-    .version('2.0.0');
+    .version(PACKAGE_VERSION);
 
   program
     .command('evaluate')
@@ -530,6 +531,15 @@ export async function checkBrokenLinks(
   }
 
   return broken;
+}
+
+function loadPackageVersion(): string {
+  try {
+    const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { version?: unknown };
+    return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
 }
 
 if (require.main === module) {

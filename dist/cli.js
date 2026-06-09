@@ -31,6 +31,7 @@ const watcher_1 = require("./core/watcher");
 const server_1 = require("./service/server");
 const DEFAULT_OUTPUT_DIR = 'reports';
 const DEFAULT_SEARCH_LIMIT = 10;
+const PACKAGE_VERSION = loadPackageVersion();
 async function main() {
     let activeWatchController;
     let activeService;
@@ -51,7 +52,7 @@ async function main() {
     program
         .name('stealth-lightbeacon')
         .description('TypeScript crawl orchestration and multi-domain site auditing CLI with security checks, SEO, AEO, GEO, and performance reporting.')
-        .version('2.0.0');
+        .version(PACKAGE_VERSION);
     program
         .command('evaluate')
         .argument('<url>', 'Target Drupal site URL')
@@ -463,6 +464,15 @@ async function checkBrokenLinks(startUrl, fetchPage) {
         }
     }
     return broken;
+}
+function loadPackageVersion() {
+    try {
+        const packageJson = JSON.parse((0, node_fs_1.readFileSync)((0, node_path_1.join)(__dirname, '..', 'package.json'), 'utf8'));
+        return typeof packageJson.version === 'string' ? packageJson.version : '0.0.0';
+    }
+    catch {
+        return '0.0.0';
+    }
 }
 if (require.main === module) {
     void main();
