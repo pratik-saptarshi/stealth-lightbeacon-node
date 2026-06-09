@@ -8,7 +8,10 @@ class EvaluationJobStore {
     auditRunner;
     clock;
     statePath;
+    shutdownDrainTimeoutMs;
     jobs = new Map();
+    activeRuns = new Map();
+    activeControllers = new Map();
     sequence = 0;
     closed = false;
     recoveryError;
@@ -16,6 +19,7 @@ class EvaluationJobStore {
         this.auditRunner = options.auditRunner ?? auditRunner_1.defaultAuditRunner;
         this.clock = options.clock ?? (() => Date.now());
         this.statePath = options.statePath;
+        this.shutdownDrainTimeoutMs = options.shutdownDrainTimeoutMs ?? 250;
         this.recoveryError = this.load();
     }
     create(targetUrl, options = {}) {
@@ -30,11 +34,15 @@ class EvaluationJobStore {
         };
         this.jobs.set(job.id, job);
         queueMicrotask(() => {
-            void this.run(job);
+            const run = this.run(job);
+            this.activeRuns.set(job.id, run);
+            void run.finally(() => {
+                this.activeRuns.delete(job.id);
+            });
         });
         return snapshot(job);
     }
-    close() {
+    async close() {
         this.closed = true;
         for (const job of this.jobs.values()) {
             if (job.status === 'queued' || job.status === 'running') {
@@ -47,7 +55,11 @@ class EvaluationJobStore {
                 });
             }
         }
+        for (const controller of this.activeControllers.values()) {
+            controller.abort();
+        }
         this.persist();
+        await this.drainActiveRuns();
     }
     get(id) {
         const job = this.jobs.get(id);
@@ -67,12 +79,15 @@ class EvaluationJobStore {
         if (this.closed) {
             return;
         }
+        const controller = new AbortController();
+        this.activeControllers.set(job.id, controller);
         this.update(job, { status: 'running' });
         try {
             const result = await this.auditRunner({
                 id: job.id,
                 targetUrl: job.targetUrl,
-                options: job.options
+                options: job.options,
+                signal: controller.signal
             });
             if (this.closed) {
                 return;
@@ -94,6 +109,19 @@ class EvaluationJobStore {
             });
             this.persist();
         }
+        finally {
+            this.activeControllers.delete(job.id);
+        }
+    }
+    async drainActiveRuns() {
+        const activeRuns = Array.from(this.activeRuns.values());
+        if (activeRuns.length === 0) {
+            return;
+        }
+        await Promise.race([
+            Promise.allSettled(activeRuns),
+            new Promise((resolve) => setTimeout(resolve, this.shutdownDrainTimeoutMs))
+        ]);
     }
     update(job, changes) {
         Object.assign(job, changes, { updatedAt: this.timestamp() });

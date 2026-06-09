@@ -269,7 +269,7 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
     },
     url: `${config.tls ? 'https' : 'http'}://${config.host}:${address.port}`,
     close: async () => {
-      jobs.close();
+      await jobs.close();
       await closeServer(server);
     }
   };

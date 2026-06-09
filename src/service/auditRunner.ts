@@ -2,6 +2,7 @@ export interface EvaluationRequest {
   id: string;
   targetUrl: string;
   options: Record<string, unknown>;
+  signal: AbortSignal;
 }
 
 export type EvaluationResult = Record<string, unknown>;

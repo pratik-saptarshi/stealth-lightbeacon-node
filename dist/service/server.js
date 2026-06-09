@@ -277,7 +277,7 @@ async function startService(input = {}) {
         },
         url: `${config.tls ? 'https' : 'http'}://${config.host}:${address.port}`,
         close: async () => {
-            jobs.close();
+            await jobs.close();
             await closeServer(server);
         }
     };

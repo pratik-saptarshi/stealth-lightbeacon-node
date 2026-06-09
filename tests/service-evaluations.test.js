@@ -266,3 +266,48 @@ test('service close marks active persisted jobs as interrupted before restart', 
     fs.rmSync(artifactRoot, { recursive: true, force: true });
   }
 });
+
+test('service close aborts and drains active evaluation runners before returning', async () => {
+  const { startService } = require('../dist/service/server.js');
+  let runnerSignal;
+  let cleanupFinished = false;
+  let closed = false;
+  let service = await startService({
+    host: '127.0.0.1',
+    port: 0,
+    auditRunner: async (request) => {
+      runnerSignal = request.signal;
+      if (!request.signal) {
+        return new Promise(() => {});
+      }
+      await new Promise((resolve) => {
+        request.signal.addEventListener('abort', () => {
+          setTimeout(() => {
+            cleanupFinished = true;
+            resolve();
+          }, 10);
+        }, { once: true });
+      });
+      return { ok: true };
+    }
+  });
+
+  try {
+    const created = await requestJson(`${service.url}/evaluations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetUrl: 'https://pending.test' })
+    });
+    await waitForJob(`${service.url}/evaluations/${created.body.id}`, 'running');
+
+    await service.close();
+    closed = true;
+
+    assert.ok(runnerSignal instanceof AbortSignal);
+    assert.equal(runnerSignal.aborted, true);
+    assert.equal(cleanupFinished, true);
+  } finally {
+    if (!closed) {
+      await service.close();
+    }
+  }
+});
