@@ -47,7 +47,7 @@ jobs:
         run: pnpm audit --prod > .tmp/release-evidence/audit-prod.txt
 
       - name: Generate CI SBOM evidence
-        run: pnpm list --prod --json > .tmp/release-evidence/sbom.cyclonedx.json
+        run: pnpm dlx @cyclonedx/cdxgen -t npm -o .tmp/release-evidence/sbom.cyclonedx.json
 
       - name: Scan repository for common secret patterns
         run: |

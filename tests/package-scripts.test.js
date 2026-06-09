@@ -145,6 +145,8 @@ test('ci captures automated release evidence and leaves human release gates manu
   assert.match(workflow, /pnpm audit --prod > \.tmp\/release-evidence\/audit-prod\.txt/);
   assert.match(workflow, /\.tmp\/release-evidence\/secret-scan\.txt/);
   assert.match(workflow, /\.tmp\/release-evidence\/sbom\.cyclonedx\.json/);
+  assert.match(workflow, /pnpm dlx @cyclonedx\/cdxgen/);
+  assert.doesNotMatch(workflow, /pnpm list --prod --json > \.tmp\/release-evidence\/sbom\.cyclonedx\.json/);
   assert.doesNotMatch(workflow, /pnpm run release:security:check/);
   assert.doesNotMatch(workflow, /pnpm run release:dry/);
   assert.match(checklist, /`MANUAL` `pnpm run release:security:check` verifies completed release evidence locally before publish/);

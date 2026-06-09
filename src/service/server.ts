@@ -169,7 +169,12 @@ export async function startService(input: ServiceConfigInput = {}): Promise<Star
         writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
         return;
       }
-      const artifact = artifacts.open(id, decodeURIComponent(evaluationArtifactMatch[2]));
+      const artifactName = decodeArtifactName(evaluationArtifactMatch[2]);
+      if (!artifactName) {
+        writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
+        return;
+      }
+      const artifact = artifacts.open(id, artifactName);
       if (artifact === 'invalid') {
         writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
         return;
@@ -371,6 +376,14 @@ function errorEnvelope(code: string, message: string): { ok: false; error: { cod
       message
     }
   };
+}
+
+function decodeArtifactName(rawName: string): string | undefined {
+  try {
+    return decodeURIComponent(rawName);
+  } catch {
+    return undefined;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

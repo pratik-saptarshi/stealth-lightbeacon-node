@@ -183,7 +183,12 @@ async function startService(input = {}) {
                 writeJson(response, 409, errorEnvelope('result_not_ready', 'Evaluation result is not ready'));
                 return;
             }
-            const artifact = artifacts.open(id, decodeURIComponent(evaluationArtifactMatch[2]));
+            const artifactName = decodeArtifactName(evaluationArtifactMatch[2]);
+            if (!artifactName) {
+                writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
+                return;
+            }
+            const artifact = artifacts.open(id, artifactName);
             if (artifact === 'invalid') {
                 writeJson(response, 400, errorEnvelope('invalid_artifact_path', 'Artifact path is invalid'));
                 return;
@@ -369,6 +374,14 @@ function errorEnvelope(code, message) {
             message
         }
     };
+}
+function decodeArtifactName(rawName) {
+    try {
+        return decodeURIComponent(rawName);
+    }
+    catch {
+        return undefined;
+    }
 }
 function isRecord(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
