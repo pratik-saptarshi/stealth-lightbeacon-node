@@ -132,12 +132,12 @@ test('github workflows install pnpm before setup-node cache uses it', () => {
   };
 
   for (const [workflowName, workflow] of Object.entries(workflows)) {
-    const pnpmSetupIndex = workflow.indexOf('pnpm/action-setup@v4');
-    const setupNodeIndex = workflow.indexOf('actions/setup-node@v4');
-    assert.notEqual(pnpmSetupIndex, -1, `${workflowName} must install pnpm before setup-node cache`);
-    assert.notEqual(setupNodeIndex, -1, `${workflowName} must configure setup-node`);
+    const pnpmSetup = workflow.match(/pnpm\/action-setup@v\d+/);
+    const setupNode = workflow.match(/actions\/setup-node@v\d+/);
+    assert.ok(pnpmSetup, `${workflowName} must install pnpm before setup-node cache`);
+    assert.ok(setupNode, `${workflowName} must configure setup-node`);
     assert.ok(
-      pnpmSetupIndex < setupNodeIndex,
+      pnpmSetup.index < setupNode.index,
       `${workflowName} must run pnpm/action-setup before actions/setup-node cache`
     );
   }
