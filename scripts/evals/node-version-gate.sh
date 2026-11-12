@@ -233,9 +233,11 @@ for path in scan_paths:
                     )
             if path == "package.json":
                 for match in re.finditer(r"\bnode:([0-9][0-9A-Za-z.\-]*)", line):
-                    if numeric(match.group(1)) < target_tuple:
+                    raw = match.group(1)
+                    base = raw.split("-", 1)[0]
+                    if numeric(base) < target_tuple:
                         fail(
-                            f"{path}:{lineno}: Node {match.group(1)} is below target "
+                            f"{path}:{lineno}: Node {raw} is below target "
                             f"{target} ({match.group(0).strip()})"
                         )
 if script_paths:

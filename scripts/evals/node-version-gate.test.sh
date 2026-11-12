@@ -262,6 +262,21 @@ if [ -n "$DOC" ]; then
   expect_fail "doc Node v20"
 fi
 
+# --- 10. correctly pinned image variant must pass --------------------------
+fresh
+python3 - "$WORK/package.json" "$TARGET" <<'PY'
+import json, sys
+path, target = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data.setdefault("scripts", {})["probe-image"] = (
+    f"docker run --rm node:{target}-alpine node -v"
+)
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2)
+PY
+expect_pass "package script pins node:<target>-alpine"
+
 if [ "$failures" -ne 0 ]; then
   echo "SELFTEST: FAILED ($failures)" >&2
   exit 1
