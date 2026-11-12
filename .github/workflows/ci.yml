@@ -20,9 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Verify Node runtime policy
-        run: bash scripts/evals/node-version-gate.sh
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -33,6 +30,11 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
+
+      - name: Verify Node runtime policy
+        env:
+          GATE_REQUIRE_RUNTIME: "1"
+        run: bash scripts/evals/node-version-gate.sh
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

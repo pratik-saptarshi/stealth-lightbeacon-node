@@ -417,8 +417,8 @@ BDD:
 
 TDD:
 1. Add a workflow/package consistency test.
-2. Either move CI to Node 24+ or lower `engines.node` with an explicit support
-   decision.
+2. Either move CI to the Node floor declared in `engines.node` or lower
+   `engines.node` with an explicit support decision.
 
 Acceptance:
 - CI does not test unsupported Node versions as the primary release lane.
@@ -508,7 +508,7 @@ safety and publish governance hardening.
 | `/capabilities` duplicates engine/format literals from runtime schemas | P3 | Bundle | `2go.1.4` | Capabilities derive engines/formats from a shared runtime contract or exported schemas |
 | CI writes dependency-list JSON to a CycloneDX-named SBOM evidence file | P2 | Must-fix | `2go.2.1` | CI generates valid CycloneDX/SPDX evidence or relabels docs/artifacts as dependency inventory; checker validates schema |
 | Production release wrapper does not enforce release security evidence gate | P3 | Bundle | `2go.2.2` | `tools/release.sh` runs `release:security:check` or verifies a checked evidence bundle before `release-it` |
-| Non-GitHub CI configs are stale against Node 24 and pnpm policy | P3 | Defer | `2go.2.3` | Alternate CI configs are aligned with GitHub Actions or removed/documented inactive |
+| Non-GitHub CI configs are stale against the current Node and pnpm policy | P3 | Defer | `2go.2.3` | Alternate CI configs are aligned with GitHub Actions or removed/documented inactive |
 | CLI `--version` reports stale hard-coded package version | P3 | Must-fix | `2go.3.1` | CLI version output matches `package.json` with a drift regression test |
 | BOM still describes an npm-blocking `preinstall` hook | P3 | Must-fix | `2go.3.2` | BOM accurately states pnpm is pinned for repo work and no `preinstall` blocks npm global install |
 
