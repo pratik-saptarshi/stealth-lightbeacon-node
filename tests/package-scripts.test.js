@@ -57,25 +57,20 @@ test('pnpm scripts use a non-interactive POSIX shell', () => {
   assert.match(npmrc, /^manage-package-manager-versions=false$/m);
 });
 
-test('ci node matrix satisfies package engine policy', () => {
+test('ci node version satisfies package engine policy', () => {
   const packageJson = readPackageJson();
   const workflow = readCiWorkflow();
   const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
   assert.ok(Number.isInteger(minimumMajor), `Unsupported node engine range: ${packageJson.engines.node}`);
 
-  const matrixMatch = workflow.match(/node-version:\s*\[([^\]]+)\]/);
-  assert.ok(matrixMatch, 'CI workflow must define a node-version matrix');
-  const versions = matrixMatch[1].split(',').map((version) => version.trim());
-  assert.ok(versions.length > 0, 'CI workflow must test at least one Node version');
-
-  for (const version of versions) {
-    const major = Number(version.match(/^(\d+)/)?.[1]);
-    assert.ok(Number.isInteger(major), `Unsupported CI node-version entry: ${version}`);
-    assert.ok(
-      major >= minimumMajor,
-      `CI node-version ${version} does not satisfy package engine ${packageJson.engines.node}`
-    );
-  }
+  const versionMatch = workflow.match(/node-version:\s*['"]?(\d+(?:\.\d+)*)['"]?/);
+  assert.ok(versionMatch, 'CI workflow must configure a node-version');
+  const major = Number(versionMatch[1].split('.')[0]);
+  assert.ok(Number.isInteger(major), `Unsupported CI node-version entry: ${versionMatch[1]}`);
+  assert.ok(
+    major >= minimumMajor,
+    `CI node-version ${versionMatch[1]} does not satisfy package engine ${packageJson.engines.node}`
+  );
 });
 
 test('ci build-and-test job exposes a versionless required check context', () => {
@@ -88,7 +83,8 @@ test('ci build-and-test job exposes a versionless required check context', () =>
     /^    name: build-and-test$/m,
     'build-and-test must set a static job name so the required check context stays versionless'
   );
-  assert.match(job, /node-version:\s*\[[^\]]+\]/, 'build-and-test must keep its node-version matrix');
+  assert.doesNotMatch(job, /matrix:/, 'a matrix appends its values to the check context');
+  assert.match(job, /node-version:\s*26\.13\.1/, 'build-and-test must pin the patched Node version directly');
 });
 
 test('all github workflow node versions satisfy package engine policy', () => {
