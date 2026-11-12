@@ -232,6 +232,11 @@ printf 'name: probe\nruns:\n  using: node20\n  main: index.js\n' >"$WORK/.github
 expect_fail "action runs using node20"
 
 fresh
+mkdir -p "$WORK/.github/actions/probe"
+printf "name: probe\nruns:\n  using: 'node24'\n  main: index.js\n" >"$WORK/.github/actions/probe/action.yml"
+expect_fail "action runs using quoted node24"
+
+fresh
 WF="$(first_workflow)"
 if [ -n "$WF" ]; then
   printf '\n      - run: docker run --rm node:20 true\n' >>"$WF"

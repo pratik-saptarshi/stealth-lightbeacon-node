@@ -193,7 +193,7 @@ def scan_workflow(path, text):
                 f"!= FORCE_JAVASCRIPT_ACTIONS_TO_NODE{major}"
             )
 
-    for match in re.finditer(r"(?m)^[ \t]*using[ \t]*:[ \t]*node(\d+)", text):
+    for match in re.finditer(r"using[ \t]*:[ \t]*['\"]?node(\d+)", text):
         if match.group(1) != major:
             fail(f"{path}: runs using node{match.group(1)} != node{major}")
 
@@ -220,7 +220,7 @@ scan_paths = workflow_paths + action_paths + script_paths
 if os.path.exists("package.json"):
     scan_paths = scan_paths + ["package.json"]
 for path in scan_paths:
-    if path.endswith("node-version-gate.test.sh"):
+    if path == "scripts/evals/node-version-gate.test.sh":
         continue
     with open(path, encoding="utf-8", errors="replace") as handle:
         for lineno, line in enumerate(handle, 1):
@@ -231,6 +231,13 @@ for path in scan_paths:
                         f"{path}:{lineno}: Node {version} is below target {target} "
                         f"({match.group(0).strip()})"
                     )
+            if path == "package.json":
+                for match in re.finditer(r"\bnode:([0-9][0-9A-Za-z.\-]*)", line):
+                    if numeric(match.group(1)) < target_tuple:
+                        fail(
+                            f"{path}:{lineno}: Node {match.group(1)} is below target "
+                            f"{target} ({match.group(0).strip()})"
+                        )
 if script_paths:
     ok(f"scripts and run bodies do not install or use Node below {target}")
 
