@@ -265,7 +265,7 @@ if os.path.exists(".gitlab-ci.yml") or os.path.exists("bitbucket-pipelines.yml")
 
 # S8 - docs must not advertise a Node version below target ------------------
 doc_paths = sorted(glob.glob("*.md")) + sorted(glob.glob("docs/**/*.md", recursive=True))
-old_major = r"(18|20|22|24|25)"
+old_major = r"(1[0-9]|2[0-5])"
 stale_patterns = [
     re.compile(rf"(?<![\d.])>=\s*`?{old_major}\b"),
     re.compile(rf"Node(?:\.js)?\s*`?\s*{old_major}\b"),
@@ -280,6 +280,12 @@ for path in doc_paths:
     with open(path, encoding="utf-8", errors="replace") as handle:
         for lineno, line in enumerate(handle, 1):
             decoded = html.unescape(line)
+            decoded = (
+                decoded.replace("\u2265", ">=")
+                .replace("\u2264", "<=")
+                .replace("\uff1e", ">")
+                .replace("\uff1c", "<")
+            )
             matched = False
             for pattern in stale_patterns:
                 if pattern.search(decoded):

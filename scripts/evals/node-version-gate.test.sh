@@ -175,6 +175,16 @@ else
   expect_fail "doc entity &gt;=24.0.0"
 fi
 
+# --- 7c. doc states the floor with a Unicode comparison operator -----------
+fresh
+DOC="$(first_doc)"
+if [ -z "$DOC" ]; then
+  bad "no root markdown doc found"
+else
+  printf '\nNode engine: ≥%s\n' "20" >>"$DOC"
+  expect_fail "doc unicode >=20"
+fi
+
 # --- 8. devcontainer / pipeline image below target (where present) ---------
 fresh
 MUTATED_IMAGE=0

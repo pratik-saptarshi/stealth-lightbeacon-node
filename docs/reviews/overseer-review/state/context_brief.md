@@ -4,7 +4,7 @@
 - Branch: `main` | Single commit: `589ca14 initial public release`
 - Worktree: no | Commits behind origin: unknown (no remote fetch)
 - Test suite: **58/58 pass** (4.0s)
-- Node engine: ≥20 | TypeScript 5.8.3
+- Node engine: >=26.13.1 <27 | TypeScript 5.8.3
 
 ## Stack Signals Detected
 - TypeScript (strong) → TS Reviewer persona warranted
