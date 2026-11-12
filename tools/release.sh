@@ -7,11 +7,15 @@ set -euo pipefail
 echo "=== Running Quality Checks (Typecheck, Unit Tests, MCP contract, Coverage CI) ==="
 pnpm run quality:check
 
-# 2. Run Release Security Gate
+# 2. Verify the Node runtime policy
+echo "=== Verifying Node Runtime Policy ==="
+pnpm run eval:node-version
+
+# 3. Run Release Security Gate
 echo "=== Running Release Security Gate (Evidence, SBOM, Secrets, Pack Boundary) ==="
 pnpm run release:security:check
 
-# 3. Perform Release via release-it
+# 4. Perform Release via release-it
 echo "=== Executing release-it ==="
 # Unset GITHUB_TOKEN if it's invalid to let gh keyring token take precedence
 if [ -n "${GITHUB_TOKEN:-}" ]; then

@@ -139,6 +139,19 @@ test('alternate ci configs satisfy node and pnpm policy or stay absent', () => {
     );
     assert.match(config, /pnpm install --frozen-lockfile/);
     assert.doesNotMatch(config, /\bnpm ci\b/);
+
+    const installCount = config.match(/pnpm install --frozen-lockfile/g)?.length ?? 0;
+    const gateCount = config.match(/bash scripts\/evals\/node-version-gate\.sh/g)?.length ?? 0;
+    assert.equal(
+      gateCount,
+      installCount,
+      `${configName} must run bash scripts/evals/node-version-gate.sh after every pnpm install step`
+    );
+    assert.ok(
+      config.indexOf('bash scripts/evals/node-version-gate.sh') >
+        config.indexOf('pnpm install --frozen-lockfile'),
+      `${configName} must run the Node version gate after pnpm install`
+    );
   }
 });
 
@@ -209,13 +222,16 @@ test('ci captures automated release evidence and leaves human release gates manu
 test('production release wrapper enforces release security gate before release-it', () => {
   const releaseScript = readReleaseScript();
   const qualityIndex = releaseScript.indexOf('pnpm run quality:check');
+  const nodeGateIndex = releaseScript.indexOf('pnpm run eval:node-version');
   const securityIndex = releaseScript.indexOf('pnpm run release:security:check');
   const releaseItIndex = releaseScript.indexOf('pnpm exec release-it');
 
   assert.notEqual(qualityIndex, -1);
+  assert.notEqual(nodeGateIndex, -1);
   assert.notEqual(securityIndex, -1);
   assert.notEqual(releaseItIndex, -1);
-  assert.ok(qualityIndex < securityIndex);
+  assert.ok(qualityIndex < nodeGateIndex);
+  assert.ok(nodeGateIndex < securityIndex);
   assert.ok(securityIndex < releaseItIndex);
 });
 
