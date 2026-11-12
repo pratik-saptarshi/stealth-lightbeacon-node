@@ -1,4 +1,6 @@
-FROM mcr.microsoft.com/devcontainers/typescript-node:1-20-bookworm
+FROM node:26.13.1-bookworm
+
+RUN npm install -g pnpm@11.4.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright

@@ -79,7 +79,7 @@ Last gate refresh: 2026-06-09.
 
 - [ ] `AUTO` README documents current npm-publishable posture.
 - [ ] `MANUAL` README includes install/build commands, CLI usage, secret handling, generated artifact rules, and CI test modes.
-- [ ] `MANUAL` README documents Node `>=24.0.0`, native dependency caveats, and optional rendered/browser behavior.
+- [ ] `MANUAL` README documents Node `>=26.13.1 <27`, native dependency caveats, and optional rendered/browser behavior.
 - [ ] `MANUAL` `SECURITY.md` explains private vulnerability reporting and secret-handling expectations.
 - [ ] `MANUAL` BOM in `docs/bill-of-materials.html.md` matches current package metadata and publish boundary.
 
@@ -105,7 +105,7 @@ Last gate refresh: 2026-06-09.
 - [ ] `MANUAL` Push to release branch or `main` triggers CI.
 - [ ] `MANUAL` GitHub Actions CI run reaches success.
 - [ ] `MANUAL` CodeQL reaches success for actions, JavaScript/TypeScript, and Rust.
-- [ ] `MANUAL` Scheduled/manual audit workflow uses Node 24 and current `evaluate` CLI syntax.
+- [ ] `MANUAL` Scheduled/manual audit workflow uses Node 26.13.1 and current `evaluate` CLI syntax.
 - [ ] `MANUAL` Any CodeQL pending state is monitored until resolved or accepted by a documented risk owner.
 
 ## I) Publish Gate

@@ -15,10 +15,13 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [24.x]
+        node-version: [26.13.1]
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Verify Node runtime policy
+        run: bash scripts/evals/node-version-gate.sh
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5

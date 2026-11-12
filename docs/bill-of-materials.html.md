@@ -6,7 +6,7 @@
   <p><strong>Package:</strong> <code>stealth-lightbeacon-node@3.0.11</code></p>
   <p><strong>Runtime:</strong> Node.js CLI, HTTP service, and MCP stdio server</p>
   <p><strong>Package manager:</strong> <code>pnpm@11.4.0</code></p>
-  <p><strong>Node engine:</strong> <code>&gt;=24.0.0</code></p>
+  <p><strong>Node engine:</strong> <code>&gt;=26.13.1 &lt;27</code></p>
   <p><strong>Publish target:</strong> public npm package, global-installable CLI</p>
   <p><strong>Publishing gate updated:</strong> 2026-06-09</p>
   <p><strong>Gate owner:</strong> release operator for the current Beads publishing issue</p>
@@ -236,7 +236,7 @@ The grep check is a local pattern screen, not a substitute for GitHub secret sca
 
 ### 4.3 GitHub and CI Controls
 
-- `.github/workflows/ci.yml` uses Node `24.x`, frozen pnpm install, build, and `pnpm run quality:check`.
+- `.github/workflows/ci.yml` uses Node `26.13.1`, frozen pnpm install, build, and `pnpm run quality:check`.
 - `.github/workflows/stealth-lightbeacon-audit.yml` is an audit workflow and must remain least-privilege.
 - GitHub CodeQL/code scanning, Dependabot alerts, and secret scanning status must be reviewed before publish.
 
