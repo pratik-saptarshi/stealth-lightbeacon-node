@@ -234,3 +234,15 @@ test('ts-node source tests have direct node type definitions', () => {
 
   assert.match(packageJson.devDependencies?.['@types/node'] ?? '', /^\^?\d+\.\d+\.\d+/);
 });
+
+test('readme install section documents the package engine node range', () => {
+  const packageJson = readPackageJson();
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'readme.md'), 'utf8');
+  const installSection = readme.match(/## Install\n([\s\S]*?)\n## /)?.[1] ?? '';
+
+  assert.ok(installSection, 'readme.md must keep a dedicated Install section');
+  assert.ok(
+    installSection.includes(`Node.js ${packageJson.engines.node}`),
+    `readme.md Install section must document Node.js ${packageJson.engines.node}`
+  );
+});

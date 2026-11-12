@@ -21,12 +21,19 @@ They must stay out of commits and release tarballs unless explicitly listed in t
 
 ## Install
 
+Prerequisites:
+
+- Node.js >=26.13.1 <27 (the `engines.node` range; `.nvmrc` pins the exact target).
+- pnpm 11.4.0 (the `packageManager` pin).
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm run build
 ```
 
 Use `pnpm install --frozen-lockfile` for clean-room installs and CI. Do not replace it with `pnpm install` in release automation.
+
+Native dependency caveats: `@duckdb/node-api` and `@lancedb/lancedb` ship prebuilt native bindings, so persistence may need a compatible platform and toolchain. Rendered and stealth browser behavior (`--render`, `--engine rendered`, `--engine stealth`) is optional and requires a compatible Playwright browser install; plain HTTP audits do not.
 
 ## CLI Usage
 
