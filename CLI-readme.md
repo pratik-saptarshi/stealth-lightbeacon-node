@@ -17,7 +17,7 @@ Primary executable paths:
 
 ## 2. Prerequisites
 
-- Node.js `>=24.0.0` (repo currently validated on Node `26.0.0`).
+- Node.js `>=26.13.1 <27` (repo currently validated on Node `26.13.1`).
 - pnpm available in PATH.
 - Network egress allowed for target domains and any external APIs used by enabled checks.
 - Write access to workspace output directories (recommended: `.tmp/reports/...`).

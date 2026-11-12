@@ -1,7 +1,7 @@
 stages:
   - test
 
-image: node:24
+image: node:26.13.1
 
 cache:
   paths:

@@ -236,7 +236,7 @@ The grep check is a local pattern screen, not a substitute for GitHub secret sca
 
 ### 4.3 GitHub and CI Controls
 
-- `.github/workflows/ci.yml` uses Node `24.x`, frozen pnpm install, build, and `pnpm run quality:check`.
+- `.github/workflows/ci.yml` uses Node `26.13.1`, frozen pnpm install, build, and `pnpm run quality:check`.
 - `.github/workflows/stealth-lightbeacon-audit.yml` is an audit workflow and must remain least-privilege.
 - GitHub CodeQL/code scanning, Dependabot alerts, and secret scanning status must be reviewed before publish.
 

@@ -79,7 +79,7 @@ Last gate refresh: 2026-06-09.
 
 - [ ] `AUTO` README documents current npm-publishable posture.
 - [ ] `MANUAL` README includes install/build commands, CLI usage, secret handling, generated artifact rules, and CI test modes.
-- [ ] `MANUAL` README documents Node `>=24.0.0`, native dependency caveats, and optional rendered/browser behavior.
+- [ ] `MANUAL` README documents Node `>=26.13.1 <27`, native dependency caveats, and optional rendered/browser behavior.
 - [ ] `MANUAL` `SECURITY.md` explains private vulnerability reporting and secret-handling expectations.
 - [ ] `MANUAL` BOM in `docs/bill-of-materials.html.md` matches current package metadata and publish boundary.
 
