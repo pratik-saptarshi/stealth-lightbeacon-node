@@ -12,7 +12,7 @@ pipelines:
             - pnpm install --frozen-lockfile
             - bash scripts/evals/node-version-gate.sh
             - pnpm run build
-            - pnpm exec stealth-lightbeacon audit "https://example.com" --depth 1 --max-urls 5 --format both --output-dir ./audit-results
+            - node dist/cli.js evaluate "https://example.com" --crawl-depth 1 --max-urls 5 --format both --out ./audit-results
           artifacts:
             - audit-results/**
   default:

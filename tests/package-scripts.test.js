@@ -125,7 +125,8 @@ test('alternate ci configs satisfy node and pnpm policy or stay absent', () => {
   assert.ok(Number.isInteger(minimumMajor), `Unsupported node engine range: ${packageJson.engines.node}`);
   assert.match(pnpmVersion ?? '', /^\d+\.\d+\.\d+$/);
 
-  for (const [configName, config] of Object.entries(readAlternateCiConfigs())) {
+  const configs = readAlternateCiConfigs();
+  for (const [configName, config] of Object.entries(configs)) {
     const imageMatch = config.match(/image:\s*node:(\d+)/);
     assert.ok(imageMatch, `${configName} must declare an active Node image`);
     assert.ok(
@@ -153,6 +154,18 @@ test('alternate ci configs satisfy node and pnpm policy or stay absent', () => {
       `${configName} must run the Node version gate after pnpm install`
     );
   }
+
+  const bitbucket = configs['bitbucket-pipelines.yml'];
+  assert.match(
+    bitbucket,
+    /node dist\/cli\.js evaluate "https:\/\/example\.com" --crawl-depth 1 --max-urls 5 --format both --out \.\/audit-results/
+  );
+  assert.match(bitbucket, /--crawl-depth 1/);
+  assert.match(bitbucket, /--out \.\/audit-results/);
+  assert.doesNotMatch(bitbucket, /pnpm exec stealth-lightbeacon/);
+  assert.doesNotMatch(bitbucket, /stealth-lightbeacon audit /);
+  assert.doesNotMatch(bitbucket, /--depth /);
+  assert.doesNotMatch(bitbucket, /--output-dir/);
 });
 
 test('github workflows install pnpm before setup-node cache uses it', () => {
