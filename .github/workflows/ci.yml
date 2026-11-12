@@ -20,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Verify Node runtime policy
+        run: bash scripts/evals/node-version-gate.sh
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:

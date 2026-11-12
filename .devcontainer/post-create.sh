@@ -2,6 +2,6 @@
 set -euo pipefail
 
 echo "=== DevContainer Post-Create Setup ==="
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 echo "=== Setup Complete! ==="

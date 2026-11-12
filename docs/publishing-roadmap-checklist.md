@@ -105,7 +105,7 @@ Last gate refresh: 2026-06-09.
 - [ ] `MANUAL` Push to release branch or `main` triggers CI.
 - [ ] `MANUAL` GitHub Actions CI run reaches success.
 - [ ] `MANUAL` CodeQL reaches success for actions, JavaScript/TypeScript, and Rust.
-- [ ] `MANUAL` Scheduled/manual audit workflow uses Node 24 and current `evaluate` CLI syntax.
+- [ ] `MANUAL` Scheduled/manual audit workflow uses Node 26.13.1 and current `evaluate` CLI syntax.
 - [ ] `MANUAL` Any CodeQL pending state is monitored until resolved or accepted by a documented risk owner.
 
 ## I) Publish Gate

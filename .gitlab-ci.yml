@@ -8,8 +8,7 @@ cache:
     - .npm/
 
 before_script:
-  - corepack enable
-  - corepack prepare pnpm@11.4.0 --activate
+  - npm install -g pnpm@11.4.0
   - pnpm install --frozen-lockfile
 
 quality-checks:

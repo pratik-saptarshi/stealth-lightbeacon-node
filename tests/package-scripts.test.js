@@ -119,7 +119,11 @@ test('alternate ci configs satisfy node and pnpm policy or stay absent', () => {
       Number(imageMatch[1]) >= minimumMajor,
       `${configName} image node:${imageMatch[1]} does not satisfy ${packageJson.engines.node}`
     );
-    assert.match(config, new RegExp(`corepack prepare pnpm@${pnpmVersion.replaceAll('.', '\\.')} --activate`));
+    const pnpmPin = pnpmVersion.replaceAll('.', '\\.');
+    assert.match(
+      config,
+      new RegExp(`(?:corepack prepare pnpm@${pnpmPin} --activate|npm install -g pnpm@${pnpmPin})`)
+    );
     assert.match(config, /pnpm install --frozen-lockfile/);
     assert.doesNotMatch(config, /\bnpm ci\b/);
   }
