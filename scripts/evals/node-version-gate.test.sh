@@ -225,6 +225,38 @@ if [ "$MUTATED_IMAGE" -eq 0 ]; then
   echo "skip: no devcontainer or pipeline image in this repo"
 fi
 
+# --- 9. action runtime, run-body image, package script, doc v-form -------
+fresh
+mkdir -p "$WORK/.github/actions/probe"
+printf 'name: probe\nruns:\n  using: node20\n  main: index.js\n' >"$WORK/.github/actions/probe/action.yml"
+expect_fail "action runs using node20"
+
+fresh
+WF="$(first_workflow)"
+if [ -n "$WF" ]; then
+  printf '\n      - run: docker run --rm node:20 true\n' >>"$WF"
+  expect_fail "run body uses node:20 image"
+fi
+
+fresh
+python3 - "$WORK/package.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    data = json.load(handle)
+data.setdefault("scripts", {})["probe-node"] = "nvm install 20"
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, indent=2)
+PY
+expect_fail "package script runs nvm install 20"
+
+fresh
+DOC="$(first_doc)"
+if [ -n "$DOC" ]; then
+  printf '\nNode v20 is required.\n' >>"$DOC"
+  expect_fail "doc Node v20"
+fi
+
 if [ "$failures" -ne 0 ]; then
   echo "SELFTEST: FAILED ($failures)" >&2
   exit 1

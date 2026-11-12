@@ -37,6 +37,9 @@ jobs:
           GATE_REQUIRE_RUNTIME: "1"
         run: bash scripts/evals/node-version-gate.sh
 
+      - name: Verify Node gate self-test
+        run: pnpm run eval:node-version:test
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

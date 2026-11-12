@@ -177,7 +177,8 @@ def scan_workflow(path, text):
             fail(f"{path}: node-version {raw} != {target}")
 
     seen_images = set()
-    for regex in (container_image_re, container_map_re):
+    generic_node_image_re = re.compile(r"\bnode:([0-9][0-9A-Za-z.\-]*)")
+    for regex in (container_image_re, container_map_re, generic_node_image_re):
         for match in regex.finditer(text):
             version = match.group(1)
             if (path, version) in seen_images:
@@ -191,6 +192,10 @@ def scan_workflow(path, text):
                 f"{path}: FORCE_JAVASCRIPT_ACTIONS_TO_NODE{match.group(1)} "
                 f"!= FORCE_JAVASCRIPT_ACTIONS_TO_NODE{major}"
             )
+
+    for match in re.finditer(r"(?m)^[ \t]*using[ \t]*:[ \t]*node(\d+)", text):
+        if match.group(1) != major:
+            fail(f"{path}: runs using node{match.group(1)} != node{major}")
 
 
 for path in workflow_paths + action_paths:
@@ -212,7 +217,11 @@ script_re = re.compile(
     r"|nvm\s+use\s+(\d+(?:\.\d+)*)"
 )
 scan_paths = workflow_paths + action_paths + script_paths
+if os.path.exists("package.json"):
+    scan_paths = scan_paths + ["package.json"]
 for path in scan_paths:
+    if path.endswith("node-version-gate.test.sh"):
+        continue
     with open(path, encoding="utf-8", errors="replace") as handle:
         for lineno, line in enumerate(handle, 1):
             for match in script_re.finditer(line):
@@ -268,7 +277,8 @@ doc_paths = sorted(glob.glob("*.md")) + sorted(glob.glob("docs/**/*.md", recursi
 old_major = r"(1[0-9]|2[0-5])"
 stale_patterns = [
     re.compile(rf"(?<![\d.])>=\s*`?{old_major}\b"),
-    re.compile(rf"Node(?:\.js)?\s*`?\s*{old_major}\b"),
+    re.compile(rf"Node(?:\.js)?\s*`?\s*v?{old_major}\b"),
+    re.compile(rf"nodejs\s+`?\s*v?{old_major}\b"),
     re.compile(rf"node:{old_major}\b"),
     re.compile(rf"\b{old_major}\.x\b"),
     re.compile(r"\b26\.[xX*]\b"),
