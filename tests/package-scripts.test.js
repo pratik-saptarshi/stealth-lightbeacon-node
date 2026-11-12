@@ -244,8 +244,15 @@ test('public npm package does not block npm global install with preinstall', () 
 
 test('ts-node source tests have direct node type definitions', () => {
   const packageJson = readPackageJson();
+  const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
+  const typesNode = packageJson.devDependencies?.['@types/node'] ?? '';
 
-  assert.match(packageJson.devDependencies?.['@types/node'] ?? '', /^\^?\d+\.\d+\.\d+/);
+  assert.match(typesNode, /^\^?\d+\.\d+\.\d+/);
+  assert.ok(Number.isInteger(minimumMajor), `Unsupported node engine range: ${packageJson.engines.node}`);
+  assert.ok(
+    Number(typesNode.match(/(\d+)/)?.[1]) >= minimumMajor,
+    `@types/node ${typesNode} must cover the Node ${minimumMajor} runtime`
+  );
 });
 
 test('readme install section documents the package engine node range', () => {
