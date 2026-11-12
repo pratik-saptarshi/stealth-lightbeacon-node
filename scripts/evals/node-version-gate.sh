@@ -23,15 +23,19 @@ if [ -f .tool-versions ]; then
   fi
 fi
 
-# S2 — engines floor
-python3 - "$TARGET" <<'PY' || fail=1
+# S2 — engines floor (full declared range, including the <27 ceiling)
+python3 - "$TARGET" "$FLOOR" <<'PY' || fail=1
 import json, re, sys
 target = sys.argv[1]
+floor = sys.argv[2]
 eng = (json.load(open("package.json")).get("engines") or {}).get("node", "")
-if re.search(rf">=\s*{re.escape(target)}(?:\s|<|$)", eng):
+def norm(s):
+    # Collapse whitespace and operator spacing so ">= 26.13.1  < 27" == floor.
+    return re.sub(r"(>=|<=|>|<)\s+", r"\1", " ".join(s.split()))
+if norm(eng) == norm(floor):
     print(f"ok: engines.node={eng}")
 else:
-    print(f"FAIL: engines.node must require >={target}, got {eng!r}", file=sys.stderr)
+    print(f"FAIL: engines.node must be exactly {floor!r} (missing ceiling or extra ranges are rejected), got {eng!r}", file=sys.stderr)
     sys.exit(1)
 PY
 
@@ -90,30 +94,47 @@ if bad:
 print(f"ok: pipelines and devcontainer pin Node {target}")
 PY
 
-# S4 — scripts must not install an older Node
-if [ -d scripts ]; then
-  hits=$(grep -RInE --include='*.sh' 'node@(1[0-9]|2[0-5])(\.[0-9]+)*' scripts tools 2>/dev/null || true)
-  if [ -n "$hits" ]; then
-    echo "$hits" >&2
-    err "scripts install Node older than $TARGET"
-  else
-    ok "scripts do not pin older Node"
-  fi
-fi
+# S4 — scripts must not install an older Node (any version below the target,
+# including unpatched 26.x releases below the target)
+python3 - "$TARGET" <<'PY' || fail=1
+import glob, re, sys
+target = tuple(int(x) for x in sys.argv[1].split("."))
+bad = []
+paths = sorted(glob.glob("scripts/**/*.sh", recursive=True) + glob.glob("tools/**/*.sh", recursive=True))
+for path in paths:
+    for i, line in enumerate(open(path, errors="replace"), 1):
+        for m in re.finditer(r"node@(\d+(?:\.\d+)*)", line):
+            v = tuple(int(x) for x in m.group(1).split("."))
+            v = v + (0,) * (len(target) - len(v))
+            if v < target:
+                bad.append(f"{path}:{i}: node@{m.group(1)} < {'.'.join(map(str, target))}")
+if bad:
+    print("FAIL: " + "; ".join(bad), file=sys.stderr)
+    sys.exit(1)
+print(f"ok: scripts do not pin older Node")
+PY
 
-# S8 — docs that state the runtime
-docs_md=$(ls docs/*.md *.md 2>/dev/null || true)
-if [ -n "$docs_md" ]; then
-  stale=$(grep -InE '(>=24\.0\.0|Node `?24([^0-9]|$)|node:24([^0-9]|$)|24\.x)' $docs_md 2>/dev/null \
-    | grep -v 'docs/bmv-completion-execution-plan.md' \
-    | grep -v 'docs/publishing-roadmap.md' || true)
-  if [ -n "$stale" ]; then
-    echo "$stale" >&2
-    err "stale Node 24 references in docs"
-  else
-    ok "docs advertise the patched floor"
-  fi
-fi
+# S8 — docs that state the runtime. HTML entities are decoded before scanning
+# so an escaped stale floor (e.g. "&gt;=24.0.0" in an .html.md doc) cannot
+# evade the check the way the literal form is caught.
+python3 - <<'PY' || fail=1
+import glob, html, re, sys
+excluded = {"docs/bmv-completion-execution-plan.md", "docs/publishing-roadmap.md"}
+pat = re.compile(r"(>=24\.0\.0|Node `?24([^0-9]|$)|node:24([^0-9]|$)|24\.x)")
+stale = []
+for path in sorted(glob.glob("docs/*.md") + glob.glob("*.md")):
+    if path in excluded:
+        continue
+    for i, line in enumerate(open(path, errors="replace"), 1):
+        decoded = html.unescape(line)
+        if pat.search(decoded):
+            stale.append(f"{path}:{i}: {decoded.rstrip()}")
+if stale:
+    print("\n".join(stale), file=sys.stderr)
+    print("FAIL: stale Node 24 references in docs", file=sys.stderr)
+    sys.exit(1)
+print("ok: docs advertise the patched floor")
+PY
 
 if [ "$fail" -ne 0 ]; then
   echo "GATE: FAILED" >&2

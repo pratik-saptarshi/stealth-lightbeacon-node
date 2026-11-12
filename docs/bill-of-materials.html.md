@@ -6,7 +6,7 @@
   <p><strong>Package:</strong> <code>stealth-lightbeacon-node@3.0.11</code></p>
   <p><strong>Runtime:</strong> Node.js CLI, HTTP service, and MCP stdio server</p>
   <p><strong>Package manager:</strong> <code>pnpm@11.4.0</code></p>
-  <p><strong>Node engine:</strong> <code>&gt;=24.0.0</code></p>
+  <p><strong>Node engine:</strong> <code>&gt;=26.13.1 &lt;27</code></p>
   <p><strong>Publish target:</strong> public npm package, global-installable CLI</p>
   <p><strong>Publishing gate updated:</strong> 2026-06-09</p>
   <p><strong>Gate owner:</strong> release operator for the current Beads publishing issue</p>
