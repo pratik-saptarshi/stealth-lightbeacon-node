@@ -78,6 +78,19 @@ test('ci node matrix satisfies package engine policy', () => {
   }
 });
 
+test('ci build-and-test job exposes a versionless required check context', () => {
+  const workflow = readCiWorkflow();
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*)/m)?.[1] ?? '';
+
+  assert.ok(job, 'ci.yml must keep the build-and-test job');
+  assert.match(
+    job,
+    /^    name: build-and-test$/m,
+    'build-and-test must set a static job name so the required check context stays versionless'
+  );
+  assert.match(job, /node-version:\s*\[[^\]]+\]/, 'build-and-test must keep its node-version matrix');
+});
+
 test('all github workflow node versions satisfy package engine policy', () => {
   const packageJson = readPackageJson();
   const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
