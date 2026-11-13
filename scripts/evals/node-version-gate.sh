@@ -1,143 +1,351 @@
 #!/usr/bin/env bash
-# Eval gate: repository must run the latest security-patched Node 26.x runtime.
+# Eval gate: every declared Node pin must equal the version in .nvmrc.
+#
+# The target is NOT hardcoded. TARGET comes from .nvmrc (trimmed); MAJOR is
+# its first component and the supported range is ">=TARGET <MAJOR+1".
+# Set GATE_REQUIRE_RUNTIME=1 to additionally require the running node binary
+# to report exactly TARGET.
 set -euo pipefail
-TARGET="26.13.1"
-FLOOR=">=${TARGET} <27"
-fail=0
-err() { echo "FAIL: $*" >&2; fail=1; }
-ok()  { echo "ok: $*"; }
 
-# S1 — runtime pins
-for f in .nvmrc .node-version; do
-  if [ -f "$f" ] && [ "$(tr -d '[:space:]' < "$f")" = "$TARGET" ]; then
-    ok "$f=$TARGET"
-  else
-    err "$f must be $TARGET"
-  fi
-done
-if [ -f .tool-versions ]; then
-  if grep -Eq "^nodejs[[:space:]]+${TARGET}$" .tool-versions; then
-    ok ".tool-versions=$TARGET"
-  else
-    err ".tool-versions must pin nodejs $TARGET"
-  fi
-fi
-
-# S2 — engines floor (full declared range, including the <27 ceiling)
-python3 - "$TARGET" "$FLOOR" <<'PY' || fail=1
-import json, re, sys
-target = sys.argv[1]
-floor = sys.argv[2]
-eng = (json.load(open("package.json")).get("engines") or {}).get("node", "")
-def norm(s):
-    # Collapse whitespace and operator spacing so ">= 26.13.1  < 27" == floor.
-    return re.sub(r"(>=|<=|>|<)\s+", r"\1", " ".join(s.split()))
-if norm(eng) == norm(floor):
-    print(f"ok: engines.node={eng}")
-else:
-    print(f"FAIL: engines.node must be exactly {floor!r} (missing ceiling or extra ranges are rejected), got {eng!r}", file=sys.stderr)
-    sys.exit(1)
-PY
-
-# S3/S4 — every GitHub workflow resolves the exact patched Node
-python3 - "$TARGET" <<'PY' || fail=1
-import glob, re, sys
-target = sys.argv[1]
-bad = []
-for path in sorted(glob.glob(".github/workflows/*.yml") + glob.glob(".github/workflows/*.yaml")):
-    text = open(path).read()
-    for m in re.finditer(r"node-version:\s*(?:\[([^\]]+)\]|['\"]?([^'\"\s,]+)['\"]?)", text):
-        raw = m.group(1) or m.group(2)
-        for v in [x.strip() for x in raw.split(",") if x.strip()]:
-            if v.startswith("${{"):
-                continue
-            if v != target:
-                bad.append(f"{path}: node-version {v} != {target}")
-    for m in re.finditer(r"image:\s*['\"]?node:([0-9][0-9.]*)", text):
-        if m.group(1) != target:
-            bad.append(f"{path}: image node:{m.group(1)} != {target}")
-    for m in re.finditer(r"FORCE_JAVASCRIPT_ACTIONS_TO_NODE(\d+)", text):
-        if m.group(1) != target.split(".")[0]:
-            bad.append(f"{path}: forces JS actions to Node {m.group(1)}")
-if bad:
-    print("FAIL: " + "; ".join(bad), file=sys.stderr)
-    sys.exit(1)
-print(f"ok: GitHub workflows pin Node {target}")
-PY
-
-# S5 — alternate pipelines and devcontainer
-python3 - "$TARGET" <<'PY' || fail=1
-import os, re, sys
-target = sys.argv[1]
-bad = []
-for path in (".gitlab-ci.yml", "bitbucket-pipelines.yml"):
-    if not os.path.exists(path):
-        continue
-    text = open(path).read()
-    m = re.search(r"image:\s*['\"]?node:([0-9][0-9.]*)", text)
-    if not m:
-        bad.append(f"{path}: no node image")
-    elif m.group(1) != target:
-        bad.append(f"{path}: node:{m.group(1)} != {target}")
-    if re.search(r"\bcorepack\b", text):
-        bad.append(f"{path}: corepack is not shipped with Node >=25")
-if os.path.exists(".devcontainer/Dockerfile"):
-    text = open(".devcontainer/Dockerfile").read()
-    m = re.search(r"FROM\s+\S*node:([0-9][0-9.]*)", text)
-    if not m:
-        bad.append(".devcontainer/Dockerfile: no node base image")
-    elif m.group(1) != target:
-        bad.append(f".devcontainer/Dockerfile: node:{m.group(1)} != {target}")
-if bad:
-    print("FAIL: " + "; ".join(bad), file=sys.stderr)
-    sys.exit(1)
-print(f"ok: pipelines and devcontainer pin Node {target}")
-PY
-
-# S4 — scripts must not install an older Node (any version below the target,
-# including unpatched 26.x releases below the target)
-python3 - "$TARGET" <<'PY' || fail=1
-import glob, re, sys
-target = tuple(int(x) for x in sys.argv[1].split("."))
-bad = []
-paths = sorted(glob.glob("scripts/**/*.sh", recursive=True) + glob.glob("tools/**/*.sh", recursive=True))
-for path in paths:
-    for i, line in enumerate(open(path, errors="replace"), 1):
-        for m in re.finditer(r"node@(\d+(?:\.\d+)*)", line):
-            v = tuple(int(x) for x in m.group(1).split("."))
-            v = v + (0,) * (len(target) - len(v))
-            if v < target:
-                bad.append(f"{path}:{i}: node@{m.group(1)} < {'.'.join(map(str, target))}")
-if bad:
-    print("FAIL: " + "; ".join(bad), file=sys.stderr)
-    sys.exit(1)
-print(f"ok: scripts do not pin older Node")
-PY
-
-# S8 — docs that state the runtime. HTML entities are decoded before scanning
-# so an escaped stale floor (e.g. "&gt;=24.0.0" in an .html.md doc) cannot
-# evade the check the way the literal form is caught.
-python3 - <<'PY' || fail=1
-import glob, html, re, sys
-excluded = {"docs/bmv-completion-execution-plan.md", "docs/publishing-roadmap.md"}
-pat = re.compile(r"(>=24\.0\.0|Node `?24([^0-9]|$)|node:24([^0-9]|$)|24\.x)")
-stale = []
-for path in sorted(glob.glob("docs/*.md") + glob.glob("*.md")):
-    if path in excluded:
-        continue
-    for i, line in enumerate(open(path, errors="replace"), 1):
-        decoded = html.unescape(line)
-        if pat.search(decoded):
-            stale.append(f"{path}:{i}: {decoded.rstrip()}")
-if stale:
-    print("\n".join(stale), file=sys.stderr)
-    print("FAIL: stale Node 24 references in docs", file=sys.stderr)
-    sys.exit(1)
-print("ok: docs advertise the patched floor")
-PY
-
-if [ "$fail" -ne 0 ]; then
+if [ ! -f .nvmrc ]; then
+  echo "FAIL: .nvmrc is missing; it is the source of truth for the Node target" >&2
   echo "GATE: FAILED" >&2
   exit 1
 fi
+
+TARGET="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\r$//' < .nvmrc)"
+if ! printf '%s' "$TARGET" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "FAIL: .nvmrc must contain a full x.y.z version, got '$TARGET'" >&2
+  echo "GATE: FAILED" >&2
+  exit 1
+fi
+MAJOR="${TARGET%%.*}"
+CEILING="$((MAJOR + 1))"
+FLOOR=">=${TARGET} <${CEILING}"
+export TARGET MAJOR CEILING FLOOR
+
+if ! python3 - <<'PY'
+import glob
+import html
+import json
+import os
+import re
+import sys
+
+target = os.environ["TARGET"]
+major = os.environ["MAJOR"]
+ceiling = os.environ["CEILING"]
+floor = os.environ["FLOOR"]
+target_tuple = tuple(int(x) for x in target.split("."))
+
+failures = []
+
+
+def fail(message):
+    failures.append(message)
+
+
+def ok(message):
+    print("ok: " + message)
+
+
+def norm_range(value):
+    # Collapse operator whitespace so ">= 26.13.1   < 27" == ">=26.13.1 <27".
+    collapsed = " ".join(value.split())
+    return re.sub(r"(>=|<=|>|<|=)\s+", r"\1", collapsed)
+
+
+def numeric(value):
+    parts = tuple(int(x) for x in value.split("."))
+    return parts + (0,) * (3 - len(parts))
+
+
+def image_version_ok(path, version, context):
+    base = version.split("-", 1)[0]
+    if base != target:
+        fail(f"{path}: {context} node:{version} != node:{target}")
+
+
+# S1 - runtime pins ---------------------------------------------------------
+for name in (".nvmrc", ".node-version"):
+    try:
+        with open(name, encoding="utf-8", errors="replace") as handle:
+            value = handle.read().strip()
+    except FileNotFoundError:
+        fail(f"{name} is missing (must pin {target})")
+        continue
+    if value == target:
+        ok(f"{name}={target}")
+    else:
+        fail(f"{name} must be exactly {target}, got {value!r}")
+
+if os.path.exists(".tool-versions"):
+    with open(".tool-versions", encoding="utf-8", errors="replace") as handle:
+        lines = [line.strip() for line in handle]
+    if any(re.fullmatch(rf"nodejs\s+{re.escape(target)}", line) for line in lines):
+        ok(f".tool-versions pins nodejs {target}")
+    else:
+        fail(f".tool-versions must pin 'nodejs {target}'")
+
+# S2 - engines.node is exactly the floor with its ceiling -------------------
+try:
+    with open("package.json", encoding="utf-8") as handle:
+        package = json.load(handle)
+except (OSError, json.JSONDecodeError) as exc:
+    fail(f"package.json could not be read: {exc}")
+    package = {}
+engines = ((package.get("engines") or {}).get("node") or "")
+if norm_range(engines) == norm_range(floor):
+    ok(f"engines.node={engines}")
+else:
+    fail(
+        "engines.node must be exactly "
+        f"{floor!r} after collapsing operator whitespace (missing ceiling, "
+        f"unions, and extra ranges are rejected), got {engines!r}"
+    )
+
+# S3/S4 - GitHub workflows and composite actions ----------------------------
+workflow_paths = sorted(
+    glob.glob(".github/workflows/**/*.yml", recursive=True)
+    + glob.glob(".github/workflows/**/*.yaml", recursive=True)
+)
+action_paths = sorted(
+    glob.glob(".github/actions/**/action.yml", recursive=True)
+    + glob.glob(".github/actions/**/action.yaml", recursive=True)
+)
+
+node_version_re = re.compile(r"(?m)^[ \t]*node-version[ \t]*:[ \t]*(.*?)[ \t]*$")
+container_image_re = re.compile(
+    r"(?m)^[ \t]*(?:image|container)[ \t]*:[ \t]*['\"]?node:([0-9][0-9A-Za-z.\-]*)"
+)
+container_map_re = re.compile(
+    r"container[ \t]*:[ \t]*\{[^}]*image[ \t]*:[ \t]*['\"]?node:([0-9][0-9A-Za-z.\-]*)"
+)
+
+
+def matrix_items(text, key):
+    escaped = re.escape(key)
+    inline = re.search(
+        rf"(?m)^[ \t]*{escaped}[ \t]*:[ \t]*\[([^\]]*)\][ \t]*$", text
+    )
+    if inline:
+        return [
+            item.strip().strip("'\"")
+            for item in inline.group(1).split(",")
+            if item.strip()
+        ]
+    block = re.search(
+        rf"(?m)^[ \t]*{escaped}[ \t]*:[ \t]*\n((?:[ \t]*-[ \t]*[^\n]+\n?)+)", text
+    )
+    if block:
+        return [
+            re.sub(r"^[ \t]*-[ \t]*", "", line).strip().strip("'\"")
+            for line in block.group(1).splitlines()
+            if line.strip()
+        ]
+    return None
+
+
+def scan_workflow(path, text):
+    for match in node_version_re.finditer(text):
+        raw = re.sub(r"\s+#.*$", "", match.group(1)).strip().strip("'\"")
+        if not raw:
+            fail(f"{path}: node-version has no value")
+        elif raw.startswith("["):
+            items = [item.strip().strip("'\"") for item in raw.strip("[]").split(",") if item.strip()]
+            for item in items:
+                if item != target:
+                    fail(f"{path}: node-version {item} != {target}")
+        elif raw.startswith("${{"):
+            expr = re.search(r"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}", raw)
+            if not expr:
+                fail(f"{path}: node-version expression {raw!r} is not a matrix reference")
+                continue
+            items = matrix_items(text, expr.group(1))
+            if not items:
+                fail(
+                    f"{path}: node-version uses {raw} but no matrix literal for "
+                    f"'{expr.group(1)}' was found in the same file"
+                )
+            else:
+                for item in items:
+                    if item != target:
+                        fail(
+                            f"{path}: matrix {expr.group(1)} value {item} != {target}"
+                        )
+        elif raw != target:
+            fail(f"{path}: node-version {raw} != {target}")
+
+    seen_images = set()
+    generic_node_image_re = re.compile(r"\bnode:([0-9][0-9A-Za-z.\-]*)")
+    for regex in (container_image_re, container_map_re, generic_node_image_re):
+        for match in regex.finditer(text):
+            version = match.group(1)
+            if (path, version) in seen_images:
+                continue
+            seen_images.add((path, version))
+            image_version_ok(path, version, "container image")
+
+    for match in re.finditer(r"FORCE_JAVASCRIPT_ACTIONS_TO_NODE(\d+)", text):
+        if match.group(1) != major:
+            fail(
+                f"{path}: FORCE_JAVASCRIPT_ACTIONS_TO_NODE{match.group(1)} "
+                f"!= FORCE_JAVASCRIPT_ACTIONS_TO_NODE{major}"
+            )
+
+    for match in re.finditer(r"using[ \t]*:[ \t]*['\"]?node(\d+)", text):
+        if match.group(1) != major:
+            fail(f"{path}: runs using node{match.group(1)} != node{major}")
+
+
+for path in workflow_paths + action_paths:
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        scan_workflow(path, handle.read())
+if workflow_paths:
+    ok(f"GitHub workflows pin Node {target}")
+if action_paths:
+    ok(f"GitHub composite actions pin Node {target}")
+
+# S4 - run bodies and shell scripts must not install/use an older Node ------
+script_paths = sorted(
+    glob.glob("scripts/**/*.sh", recursive=True)
+    + glob.glob("tools/**/*.sh", recursive=True)
+)
+script_re = re.compile(
+    r"node@(\d+(?:\.\d+)*)"
+    r"|nvm\s+install\s+(\d+(?:\.\d+)*)"
+    r"|nvm\s+use\s+(\d+(?:\.\d+)*)"
+)
+scan_paths = workflow_paths + action_paths + script_paths
+if os.path.exists("package.json"):
+    scan_paths = scan_paths + ["package.json"]
+for path in scan_paths:
+    if path == "scripts/evals/node-version-gate.test.sh":
+        continue
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for lineno, line in enumerate(handle, 1):
+            for match in script_re.finditer(line):
+                version = next(group for group in match.groups() if group)
+                if numeric(version) < target_tuple:
+                    fail(
+                        f"{path}:{lineno}: Node {version} is below target {target} "
+                        f"({match.group(0).strip()})"
+                    )
+            if path == "package.json":
+                for match in re.finditer(r"\bnode:([0-9][0-9A-Za-z.\-]*)", line):
+                    raw = match.group(1)
+                    base = raw.split("-", 1)[0]
+                    if numeric(base) < target_tuple:
+                        fail(
+                            f"{path}:{lineno}: Node {raw} is below target "
+                            f"{target} ({match.group(0).strip()})"
+                        )
+if script_paths:
+    ok(f"scripts and run bodies do not install or use Node below {target}")
+
+# S5 - alternate pipelines and devcontainers --------------------------------
+for path in (".gitlab-ci.yml", "bitbucket-pipelines.yml"):
+    if not os.path.exists(path):
+        continue
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        text = handle.read()
+    images = [
+        match.group(1)
+        for match in re.finditer(
+            r"(?m)^[ \t]*image[ \t]*:[ \t]*['\"]?node:([0-9][0-9A-Za-z.\-]*)", text
+        )
+    ]
+    if not images:
+        fail(f"{path}: no 'image: node:<version>' found")
+    for version in images:
+        image_version_ok(path, version, "image")
+    if re.search(r"\bcorepack\b", text):
+        fail(f"{path}: corepack is not shipped with Node >={25}; remove it")
+
+if os.path.exists(".devcontainer/Dockerfile"):
+    with open(".devcontainer/Dockerfile", encoding="utf-8", errors="replace") as handle:
+        text = handle.read()
+    images = [
+        match.group(1)
+        for match in re.finditer(
+            r"(?im)^[ \t]*FROM[ \t]+(?:--platform=\S+[ \t]+)?\S*node:([0-9][0-9A-Za-z.\-]*)",
+            text,
+        )
+    ]
+    if not images:
+        fail(".devcontainer/Dockerfile: no 'FROM ...node:<version>' found")
+    for version in images:
+        image_version_ok(".devcontainer/Dockerfile", version, "FROM")
+if os.path.exists(".gitlab-ci.yml") or os.path.exists("bitbucket-pipelines.yml") or os.path.exists(
+    ".devcontainer/Dockerfile"
+):
+    ok(f"pipelines and devcontainers pin Node {target}")
+
+# S8 - docs must not advertise a Node version below target ------------------
+doc_paths = sorted(glob.glob("*.md")) + sorted(glob.glob("docs/**/*.md", recursive=True))
+old_major = r"(1[0-9]|2[0-5])"
+stale_patterns = [
+    re.compile(rf"(?<![\d.])>=\s*`?{old_major}\b"),
+    re.compile(rf"Node(?:\.js)?\s*`?\s*v?{old_major}\b"),
+    re.compile(rf"nodejs\s+`?\s*v?{old_major}\b"),
+    re.compile(rf"node:{old_major}\b"),
+    re.compile(rf"\b{old_major}\.x\b"),
+    re.compile(r"\b26\.[xX*]\b"),
+]
+target_minor = target_tuple[1]
+target_patch = target_tuple[2]
+doc_failures_before = len(failures)
+for path in doc_paths:
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for lineno, line in enumerate(handle, 1):
+            decoded = html.unescape(line)
+            decoded = (
+                decoded.replace("\u2265", ">=")
+                .replace("\u2264", "<=")
+                .replace("\uff1e", ">")
+                .replace("\uff1c", "<")
+            )
+            matched = False
+            for pattern in stale_patterns:
+                if pattern.search(decoded):
+                    fail(f"{path}:{lineno}: stale Node version: {decoded.strip()}")
+                    matched = True
+                    break
+            if matched:
+                continue
+            for match in re.finditer(r"\b26\.(\d+)(?:\.(\d+))?\b", decoded):
+                minor = int(match.group(1))
+                patch = int(match.group(2) or 0)
+                if (minor, patch) < (target_minor, target_patch):
+                    fail(
+                        f"{path}:{lineno}: Node {match.group(0)} is below target "
+                        f"{target}: {decoded.strip()}"
+                    )
+                    break
+if len(failures) == doc_failures_before:
+    ok(f"docs do not advertise a Node version below {target}")
+
+if failures:
+    for message in failures:
+        print("FAIL: " + message, file=sys.stderr)
+    sys.exit(1)
+PY
+then
+  echo "GATE: FAILED" >&2
+  exit 1
+fi
+
+# RUNTIME - optional assertion that the interpreter is the pinned version --
+if [ "${GATE_REQUIRE_RUNTIME:-0}" = "1" ]; then
+  ACTUAL="$(node -v 2>/dev/null | sed 's/^v//' || true)"
+  if [ "$ACTUAL" != "$TARGET" ]; then
+    echo "FAIL: running node is ${ACTUAL:-unknown}, expected $TARGET" >&2
+    echo "GATE: FAILED" >&2
+    exit 1
+  fi
+  echo "ok: runtime node $ACTUAL"
+else
+  echo "note: runtime not asserted (set GATE_REQUIRE_RUNTIME=1 to require node $TARGET)"
+fi
+
 echo "GATE: PASSED ($TARGET)"

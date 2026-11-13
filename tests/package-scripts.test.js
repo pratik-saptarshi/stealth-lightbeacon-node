@@ -57,25 +57,34 @@ test('pnpm scripts use a non-interactive POSIX shell', () => {
   assert.match(npmrc, /^manage-package-manager-versions=false$/m);
 });
 
-test('ci node matrix satisfies package engine policy', () => {
+test('ci node version satisfies package engine policy', () => {
   const packageJson = readPackageJson();
   const workflow = readCiWorkflow();
   const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
   assert.ok(Number.isInteger(minimumMajor), `Unsupported node engine range: ${packageJson.engines.node}`);
 
-  const matrixMatch = workflow.match(/node-version:\s*\[([^\]]+)\]/);
-  assert.ok(matrixMatch, 'CI workflow must define a node-version matrix');
-  const versions = matrixMatch[1].split(',').map((version) => version.trim());
-  assert.ok(versions.length > 0, 'CI workflow must test at least one Node version');
+  const versionMatch = workflow.match(/node-version:\s*['"]?(\d+(?:\.\d+)*)['"]?/);
+  assert.ok(versionMatch, 'CI workflow must configure a node-version');
+  const major = Number(versionMatch[1].split('.')[0]);
+  assert.ok(Number.isInteger(major), `Unsupported CI node-version entry: ${versionMatch[1]}`);
+  assert.ok(
+    major >= minimumMajor,
+    `CI node-version ${versionMatch[1]} does not satisfy package engine ${packageJson.engines.node}`
+  );
+});
 
-  for (const version of versions) {
-    const major = Number(version.match(/^(\d+)/)?.[1]);
-    assert.ok(Number.isInteger(major), `Unsupported CI node-version entry: ${version}`);
-    assert.ok(
-      major >= minimumMajor,
-      `CI node-version ${version} does not satisfy package engine ${packageJson.engines.node}`
-    );
-  }
+test('ci build-and-test job exposes a versionless required check context', () => {
+  const workflow = readCiWorkflow();
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*)/m)?.[1] ?? '';
+
+  assert.ok(job, 'ci.yml must keep the build-and-test job');
+  assert.match(
+    job,
+    /^    name: build-and-test$/m,
+    'build-and-test must set a static job name so the required check context stays versionless'
+  );
+  assert.doesNotMatch(job, /matrix:/, 'a matrix appends its values to the check context');
+  assert.match(job, /node-version:\s*26\.13\.1/, 'build-and-test must pin the patched Node version directly');
 });
 
 test('all github workflow node versions satisfy package engine policy', () => {
@@ -112,7 +121,8 @@ test('alternate ci configs satisfy node and pnpm policy or stay absent', () => {
   assert.ok(Number.isInteger(minimumMajor), `Unsupported node engine range: ${packageJson.engines.node}`);
   assert.match(pnpmVersion ?? '', /^\d+\.\d+\.\d+$/);
 
-  for (const [configName, config] of Object.entries(readAlternateCiConfigs())) {
+  const configs = readAlternateCiConfigs();
+  for (const [configName, config] of Object.entries(configs)) {
     const imageMatch = config.match(/image:\s*node:(\d+)/);
     assert.ok(imageMatch, `${configName} must declare an active Node image`);
     assert.ok(
@@ -126,7 +136,32 @@ test('alternate ci configs satisfy node and pnpm policy or stay absent', () => {
     );
     assert.match(config, /pnpm install --frozen-lockfile/);
     assert.doesNotMatch(config, /\bnpm ci\b/);
+
+    const installCount = config.match(/pnpm install --frozen-lockfile/g)?.length ?? 0;
+    const gateCount = config.match(/bash scripts\/evals\/node-version-gate\.sh/g)?.length ?? 0;
+    assert.equal(
+      gateCount,
+      installCount,
+      `${configName} must run bash scripts/evals/node-version-gate.sh after every pnpm install step`
+    );
+    assert.ok(
+      config.indexOf('bash scripts/evals/node-version-gate.sh') >
+        config.indexOf('pnpm install --frozen-lockfile'),
+      `${configName} must run the Node version gate after pnpm install`
+    );
   }
+
+  const bitbucket = configs['bitbucket-pipelines.yml'];
+  assert.match(
+    bitbucket,
+    /node dist\/cli\.js evaluate "https:\/\/example\.com" --crawl-depth 1 --max-urls 5 --format both --out \.\/audit-results/
+  );
+  assert.match(bitbucket, /--crawl-depth 1/);
+  assert.match(bitbucket, /--out \.\/audit-results/);
+  assert.doesNotMatch(bitbucket, /pnpm exec stealth-lightbeacon/);
+  assert.doesNotMatch(bitbucket, /stealth-lightbeacon audit /);
+  assert.doesNotMatch(bitbucket, /--depth /);
+  assert.doesNotMatch(bitbucket, /--output-dir/);
 });
 
 test('github workflows install pnpm before setup-node cache uses it', () => {
@@ -181,6 +216,11 @@ test('ci captures automated release evidence and leaves human release gates manu
   assert.match(workflow, /\.tmp\/release-evidence\/secret-scan\.txt/);
   assert.match(workflow, /\.tmp\/release-evidence\/sbom\.cyclonedx\.json/);
   assert.match(workflow, /pnpm dlx @cyclonedx\/cdxgen/);
+  assert.match(
+    workflow,
+    /pnpm dlx @cyclonedx\/cdxgen@\d+\.\d+\.\d+ -t npm/,
+    'the SBOM tool must be pinned to an exact version'
+  );
   assert.doesNotMatch(workflow, /pnpm list --prod --json > \.tmp\/release-evidence\/sbom\.cyclonedx\.json/);
   assert.doesNotMatch(workflow, /pnpm run release:security:check/);
   assert.doesNotMatch(workflow, /pnpm run release:dry/);
@@ -191,13 +231,16 @@ test('ci captures automated release evidence and leaves human release gates manu
 test('production release wrapper enforces release security gate before release-it', () => {
   const releaseScript = readReleaseScript();
   const qualityIndex = releaseScript.indexOf('pnpm run quality:check');
+  const nodeGateIndex = releaseScript.indexOf('pnpm run eval:node-version');
   const securityIndex = releaseScript.indexOf('pnpm run release:security:check');
   const releaseItIndex = releaseScript.indexOf('pnpm exec release-it');
 
   assert.notEqual(qualityIndex, -1);
+  assert.notEqual(nodeGateIndex, -1);
   assert.notEqual(securityIndex, -1);
   assert.notEqual(releaseItIndex, -1);
-  assert.ok(qualityIndex < securityIndex);
+  assert.ok(qualityIndex < nodeGateIndex);
+  assert.ok(nodeGateIndex < securityIndex);
   assert.ok(securityIndex < releaseItIndex);
 });
 
@@ -231,6 +274,25 @@ test('public npm package does not block npm global install with preinstall', () 
 
 test('ts-node source tests have direct node type definitions', () => {
   const packageJson = readPackageJson();
+  const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
+  const typesNode = packageJson.devDependencies?.['@types/node'] ?? '';
 
-  assert.match(packageJson.devDependencies?.['@types/node'] ?? '', /^\^?\d+\.\d+\.\d+/);
+  assert.match(typesNode, /^\^?\d+\.\d+\.\d+/);
+  assert.ok(Number.isInteger(minimumMajor), `Unsupported node engine range: ${packageJson.engines.node}`);
+  assert.ok(
+    Number(typesNode.match(/(\d+)/)?.[1]) >= minimumMajor,
+    `@types/node ${typesNode} must cover the Node ${minimumMajor} runtime`
+  );
+});
+
+test('readme install section documents the package engine node range', () => {
+  const packageJson = readPackageJson();
+  const readme = fs.readFileSync(path.join(__dirname, '..', 'readme.md'), 'utf8');
+  const installSection = readme.match(/## Install\n([\s\S]*?)\n## /)?.[1] ?? '';
+
+  assert.ok(installSection, 'readme.md must keep a dedicated Install section');
+  assert.ok(
+    installSection.includes(`Node.js ${packageJson.engines.node}`),
+    `readme.md Install section must document Node.js ${packageJson.engines.node}`
+  );
 });

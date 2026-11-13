@@ -11,28 +11,30 @@ permissions:
 
 jobs:
   build-and-test:
+    name: build-and-test
     runs-on: ubuntu-24.04
-
-    strategy:
-      matrix:
-        node-version: [26.13.1]
 
     steps:
       - uses: actions/checkout@v7
-
-      - name: Verify Node runtime policy
-        run: bash scripts/evals/node-version-gate.sh
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
           version: '11.4.0'
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Use Node.js 26.13.1
         uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 26.13.1
           cache: 'pnpm'
+
+      - name: Verify Node runtime policy
+        env:
+          GATE_REQUIRE_RUNTIME: "1"
+        run: bash scripts/evals/node-version-gate.sh
+
+      - name: Verify Node gate self-test
+        run: pnpm run eval:node-version:test
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -50,7 +52,7 @@ jobs:
         run: pnpm audit --prod > .tmp/release-evidence/audit-prod.txt
 
       - name: Generate CI SBOM evidence
-        run: pnpm dlx @cyclonedx/cdxgen -t npm -o .tmp/release-evidence/sbom.cyclonedx.json
+        run: pnpm dlx @cyclonedx/cdxgen@12.9.1 -t npm -o .tmp/release-evidence/sbom.cyclonedx.json
 
       - name: Scan repository for common secret patterns
         run: |

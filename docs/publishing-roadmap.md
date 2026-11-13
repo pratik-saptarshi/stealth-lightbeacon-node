@@ -262,7 +262,7 @@ No-Go condition: failure in any G0–G4.
 ## 7) Open Decisions
 
 1. Should `desktop/` remain fully out-of-scope for root npm publish surface?
-2. What minimum Node version policy is acceptable for public users (`>=24` vs wider support)?
+2. What minimum Node version policy is acceptable for public users (the `engines.node` floor vs wider support)?
 3. Is npm provenance/signature attestation required for your org policy?
 
 ---

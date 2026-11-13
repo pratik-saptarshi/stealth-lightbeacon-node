@@ -26,6 +26,7 @@
     "coverage:ci": "node --experimental-test-coverage --test $(ls tests/*.test.js | grep -Ev 'tests/(ontology|browser-pool|scraping|ssrf-dns-rebinding|mcp\\.integration)\\.test\\.js')",
     "coverage:check": "node tools/check-coverage.js",
     "eval:node-version": "bash scripts/evals/node-version-gate.sh",
+    "eval:node-version:test": "bash scripts/evals/node-version-gate.test.sh",
     "quality:typecheck": "tsc -p tsconfig.json --noEmit --incremental false",
     "quality:unit": "pnpm run test:unit:ci",
     "quality:mcp:contract": "pnpm run test:mcp:contract",
@@ -83,7 +84,7 @@
   },
   "devDependencies": {
     "@release-it/conventional-changelog": "^11.0.0",
-    "@types/node": "^25.9.2",
+    "@types/node": "^26.6.6",
     "release-it": "^20.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

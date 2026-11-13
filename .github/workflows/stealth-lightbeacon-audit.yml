@@ -41,6 +41,11 @@ jobs:
           node-version: '26.13.1'
           cache: 'pnpm'
 
+      - name: Verify Node runtime policy
+        env:
+          GATE_REQUIRE_RUNTIME: "1"
+        run: bash scripts/evals/node-version-gate.sh
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
