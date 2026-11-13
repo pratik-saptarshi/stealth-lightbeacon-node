@@ -72,7 +72,7 @@
   ],
   "dependencies": {
     "@duckdb/node-api": "2.0.0-r.1",
-    "@lancedb/lancedb": "^0.29.0",
+    "@lancedb/lancedb": "^0.41.0",
     "cheerio": "^1.2.0",
     "commander": "^15.1.0",
     "handlebars": "^4.7.10",
