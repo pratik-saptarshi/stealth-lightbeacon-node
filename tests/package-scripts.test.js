@@ -296,3 +296,18 @@ test('readme install section documents the package engine node range', () => {
     `readme.md Install section must document Node.js ${packageJson.engines.node}`
   );
 });
+
+test('ci runs the local ontology lane after the root build', () => {
+  const workflow = readCiWorkflow();
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*)/m)?.[1] ?? '';
+  const buildIndex = job.search(/^        run: pnpm run build$/m);
+  const ontologyIndex = job.search(/^        run: STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 pnpm run test:ontology:local$/m);
+
+  assert.notEqual(buildIndex, -1, 'build-and-test must keep the root build step');
+  assert.notEqual(
+    ontologyIndex,
+    -1,
+    'build-and-test must run STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 pnpm run test:ontology:local'
+  );
+  assert.ok(ontologyIndex > buildIndex, 'the ontology lane must run after the root build');
+});

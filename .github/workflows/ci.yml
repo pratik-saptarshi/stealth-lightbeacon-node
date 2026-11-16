@@ -61,6 +61,9 @@ jobs:
       - name: Build project
         run: pnpm run build
 
+      - name: Run local ontology lane
+        run: STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 pnpm run test:ontology:local
+
       - name: Run Quality Checks
         run: pnpm run quality:check
 
