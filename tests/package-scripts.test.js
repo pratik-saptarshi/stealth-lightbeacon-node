@@ -87,6 +87,41 @@ test('ci build-and-test job exposes a versionless required check context', () =>
   assert.match(job, /node-version:\s*26\.13\.1/, 'build-and-test must pin the patched Node version directly');
 });
 
+test('ci build-and-test job exercises the desktop app after the root build', () => {
+  const workflow = readCiWorkflow();
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*)/m)?.[1] ?? '';
+
+  assert.ok(job, 'ci.yml must keep the build-and-test job');
+  assert.match(
+    job,
+    /^    timeout-minutes: 20$/m,
+    'build-and-test must cap the whole job at 20 minutes for the desktop steps'
+  );
+
+  const rootBuildIndex = job.indexOf('run: pnpm run build');
+  assert.notEqual(rootBuildIndex, -1, 'build-and-test must build the root project');
+
+  const desktopSteps = [
+    'cd desktop && pnpm install --frozen-lockfile',
+    'pnpm audit --prod',
+    'ELECTRON_RUN_AS_NODE= ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a pnpm run smoke',
+    'ELECTRON_RUN_AS_NODE= ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a pnpm run fixture'
+  ];
+
+  let previousIndex = rootBuildIndex;
+  for (const step of desktopSteps) {
+    const stepIndex = job.indexOf(step, previousIndex);
+    assert.notEqual(stepIndex, -1, `build-and-test must run "${step}" after the root build`);
+    previousIndex = stepIndex;
+  }
+
+  assert.doesNotMatch(
+    job,
+    /ELECTRON_RUN_AS_NODE=\S/,
+    'ELECTRON_RUN_AS_NODE must stay empty so Electron boots the app instead of plain Node'
+  );
+});
+
 test('all github workflow node versions satisfy package engine policy', () => {
   const packageJson = readPackageJson();
   const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
