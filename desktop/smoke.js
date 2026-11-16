@@ -1,12 +1,13 @@
 // IPC round-trip smoke: the renderer must reach `audit:compare` through the
 // preload bridge (`window.stealthDesktop.compareAudits`), not through `require`.
 //
-// SMOKE=1 makes main.js answer `audit:compare` with a stub so the smoke does not
-// need a DuckDB fixture. That is D1b's job.
-process.env.SMOKE = '1';
-
-const { app } = require('electron');
+// The smoke installs its own `audit:compare` stub after requiring main.js, so
+// it does not need a DuckDB fixture. That is D1b's job.
+const { app, ipcMain } = require('electron');
 const { createWindow } = require('./main.js');
+
+ipcMain.removeHandler('audit:compare');
+ipcMain.handle('audit:compare', () => ({ ok: true, diff: {} }));
 
 const TIMEOUT_MS = 30000;
 

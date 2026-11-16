@@ -98,11 +98,18 @@ test('ci build-and-test job exercises the desktop app after the root build', () 
     'build-and-test must cap the whole job at 20 minutes for the desktop steps'
   );
 
+  const rootInstallIndex = job.indexOf('run: pnpm install --frozen-lockfile');
+  assert.notEqual(rootInstallIndex, -1, 'build-and-test must install root dependencies');
   const rootBuildIndex = job.indexOf('run: pnpm run build');
   assert.notEqual(rootBuildIndex, -1, 'build-and-test must build the root project');
+  assert.ok(
+    rootInstallIndex < rootBuildIndex,
+    'build-and-test must install root dependencies before the build'
+  );
 
   const desktopSteps = [
     'cd desktop && pnpm install --frozen-lockfile',
+    'node --test desktop/policy.test.js',
     'pnpm audit --prod',
     'ELECTRON_RUN_AS_NODE= ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a pnpm run smoke',
     'ELECTRON_RUN_AS_NODE= ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a pnpm run fixture'

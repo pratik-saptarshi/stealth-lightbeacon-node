@@ -2,8 +2,6 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const isSmoke = process.env.SMOKE === '1';
-
 let mainWindow;
 
 function createWindow() {
@@ -25,8 +23,6 @@ function createWindow() {
 
 // IPC communication channel to query comparative run diffs using parent JS module
 ipcMain.handle('audit:compare', async (event, { runIdA, runIdB }) => {
-  if (isSmoke) return { ok: true, diff: {} };
-
   try {
     const diffEnginePath = path.join(__dirname, '..', 'dist', 'core', 'diffEngine.js');
     const dbPath = path.join(__dirname, '..', 'dist', 'core', 'db', 'duckdb.js');

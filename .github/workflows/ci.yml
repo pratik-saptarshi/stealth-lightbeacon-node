@@ -65,6 +65,9 @@ jobs:
       - name: Install desktop dependencies
         run: cd desktop && pnpm install --frozen-lockfile
 
+      - name: Verify the desktop platform policy
+        run: node --test desktop/policy.test.js
+
       - name: Audit desktop production dependencies
         run: cd desktop && pnpm audit --prod
 

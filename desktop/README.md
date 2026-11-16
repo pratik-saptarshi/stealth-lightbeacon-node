@@ -41,8 +41,9 @@ is the narrow `compareAudits` function.
   `ipcRenderer.invoke('audit:compare', { runIdA, runIdB })`.
 - `main.js` sets
   `webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }`.
-- `index.html` no longer calls `require` or `ipcRenderer`. Both uses are
-  replaced by `window.stealthDesktop.compareAudits('run-A', 'run-B')`.
+- `index.html` no longer calls `require` or `ipcRenderer`. The `require` line is
+  removed and the `invoke` call is replaced by
+  `window.stealthDesktop.compareAudits('run-A', 'run-B')`.
 
 The renderer now has exactly one capability — ask the main process to compare
 two runs — instead of the whole Node runtime. `desktop/smoke.js` exercises the
@@ -86,3 +87,4 @@ that step.
 | --- | --- |
 | `pnpm start` | Launch the app (`electron .`). |
 | `pnpm run smoke` | Run the IPC round-trip smoke test (`electron smoke.js`). |
+| `pnpm run fixture` | Seed a temp DuckDB and exercise the real compare handler (`electron fixture.js`). |

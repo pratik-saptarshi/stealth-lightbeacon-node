@@ -13,10 +13,6 @@ const { pathToFileURL } = require('node:url');
 
 const { app } = require('electron');
 
-// The fixture must exercise the real handler. Clear any ambient SMOKE value
-// before requiring main.js, which reads it at module load.
-delete process.env.SMOKE;
-
 const TIMEOUT_MS = 90000;
 const rootDir = mkdtempSync(join(tmpdir(), 'stealth-lightbeacon-desktop-fixture-'));
 const dataDir = join(rootDir, '.data');
