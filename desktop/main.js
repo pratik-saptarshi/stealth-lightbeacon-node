@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
+const isSmoke = process.env.SMOKE === '1';
+
 let mainWindow;
 
 function createWindow() {
@@ -16,23 +18,14 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  return mainWindow;
 }
-
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
 
 // IPC communication channel to query comparative run diffs using parent JS module
 ipcMain.handle('audit:compare', async (event, { runIdA, runIdB }) => {
+  if (isSmoke) return { ok: true, diff: {} };
+
   try {
     const diffEnginePath = path.join(__dirname, '..', 'dist', 'core', 'diffEngine.js');
     const dbPath = path.join(__dirname, '..', 'dist', 'core', 'db', 'duckdb.js');
@@ -55,3 +48,23 @@ ipcMain.handle('audit:compare', async (event, { runIdA, runIdB }) => {
     return { ok: false, error: err.message };
   }
 });
+
+function start() {
+  app.whenReady().then(() => {
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}
+
+// Only boot the app when this file is the entry point (`electron .`). The smoke
+// harness requires this module for `createWindow` and drives the lifecycle.
+if (require.main === module) start();
+
+module.exports = { createWindow };

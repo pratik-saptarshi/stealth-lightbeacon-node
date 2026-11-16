@@ -4,7 +4,8 @@
   "description": "Visual real-time auditing and historical diff dashboard for Stealth Lightbeacon",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "smoke": "electron smoke.js"
   },
   "keywords": [
     "electron",
