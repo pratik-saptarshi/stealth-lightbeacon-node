@@ -11,25 +11,15 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#0a0b10',
     webPreferences: {
-      nodeIntegration: true,
-      contextBridge: false
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
     }
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  return mainWindow;
 }
-
-app.whenReady().then(() => {
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
 
 // IPC communication channel to query comparative run diffs using parent JS module
 ipcMain.handle('audit:compare', async (event, { runIdA, runIdB }) => {
@@ -55,3 +45,25 @@ ipcMain.handle('audit:compare', async (event, { runIdA, runIdB }) => {
     return { ok: false, error: err.message };
   }
 });
+
+function start() {
+  app.whenReady().then(() => {
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+}
+
+// Only boot the app when this file is the entry point (`electron .`). In
+// Electron, `require.main` is Electron's bootstrap, not the app entry, so use
+// `module.parent` to distinguish the entry from a required module. The smoke
+// harness requires this module for `createWindow` and drives the lifecycle.
+if (!module.parent) start();
+
+module.exports = { createWindow };
