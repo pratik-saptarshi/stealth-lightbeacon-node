@@ -526,8 +526,6 @@
   </main>
 
   <script>
-    const { ipcRenderer } = require('electron');
-
     async function compareAudits() {
       const consoleEl = document.getElementById('console');
       const row = document.createElement('div');
@@ -537,10 +535,7 @@
       consoleEl.scrollTop = consoleEl.scrollHeight;
 
       // Invoke main process comparative queries
-      const response = await ipcRenderer.invoke('audit:compare', {
-        runIdA: 'run-A',
-        runIdB: 'run-B'
-      });
+      const response = await window.stealthDesktop.compareAudits('run-A', 'run-B');
 
       if (response && response.ok) {
         const line = document.createElement('div');

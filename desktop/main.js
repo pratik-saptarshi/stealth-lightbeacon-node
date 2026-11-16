@@ -13,8 +13,9 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#0a0b10',
     webPreferences: {
-      nodeIntegration: true,
-      contextBridge: false
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
     }
   });
 
