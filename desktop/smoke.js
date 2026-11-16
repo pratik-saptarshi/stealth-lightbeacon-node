@@ -2,7 +2,8 @@
 // preload bridge (`window.stealthDesktop.compareAudits`), not through `require`.
 //
 // The smoke installs its own `audit:compare` stub after requiring main.js, so
-// it does not need a DuckDB fixture. That is D1b's job.
+// it does not need a DuckDB fixture. This checks the bridge, not the production
+// handler; `fixture.js` exercises the real handler against a seeded DuckDB.
 const { app, ipcMain } = require('electron');
 const { createWindow } = require('./main.js');
 

@@ -47,8 +47,9 @@ is the narrow `compareAudits` function.
 
 The renderer now has exactly one capability — ask the main process to compare
 two runs — instead of the whole Node runtime. `desktop/smoke.js` exercises the
-real bridge end to end (`pnpm run smoke`) and fails if the preload stops
-loading or the channel stops answering.
+bridge end to end (`pnpm run smoke`) and fails if the preload stops loading or
+the IPC wiring breaks; `pnpm run fixture` exercises the real handler against a
+seeded DuckDB.
 
 ### Rejected alternative: `contextIsolation: false`
 
