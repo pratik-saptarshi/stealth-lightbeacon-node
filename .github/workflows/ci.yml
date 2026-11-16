@@ -77,6 +77,9 @@ jobs:
       - name: Run the desktop DuckDB fixture
         run: cd desktop && ELECTRON_RUN_AS_NODE= ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a pnpm run fixture
 
+      - name: Run local ontology lane
+        run: STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 pnpm run test:ontology:local
+
       - name: Run Quality Checks
         run: pnpm run quality:check
 

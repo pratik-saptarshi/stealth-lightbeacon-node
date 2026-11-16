@@ -3,27 +3,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const Module = require('node:module');
+const { pathToFileURL } = require('node:url');
+const nodeModule = require('node:module');
 
 const runOntologyTestsLocally = process.env.STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS === '1';
 const ontologyTest = runOntologyTestsLocally ? test : test.skip;
 
 if (runOntologyTestsLocally) {
-  require('ts-node/register/transpile-only');
+  require('tsx/cjs');
 }
 
-const originalLoad = Module._load;
 const lanceDatabases = new Map();
-
-Module._load = function patchedLoad(request, parent, isMain) {
-  if (request === '@lancedb/lancedb') {
-    return {
-      connect: async (options) => createInMemoryLanceConnection(options.uri)
-    };
-  }
-
-  return originalLoad.call(this, request, parent, isMain);
-};
 
 async function loadModule(relativePath) {
   const fullPath = runOntologyTestsLocally
@@ -106,6 +96,20 @@ function euclideanDistance(left, right) {
     sum += delta * delta;
   }
   return Math.sqrt(sum);
+}
+
+if (runOntologyTestsLocally) {
+  const fakeUrl = pathToFileURL(path.join(__dirname, 'fixtures', 'fake-lancedb.mjs')).href;
+  globalThis.__sltLanceConnect = (options) => createInMemoryLanceConnection(options.uri);
+  nodeModule.registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (specifier === '@lancedb/lancedb') {
+        return { url: fakeUrl, shortCircuit: true };
+      }
+
+      return nextResolve(specifier, context);
+    }
+  });
 }
 
 function samplePage(overrides = {}) {

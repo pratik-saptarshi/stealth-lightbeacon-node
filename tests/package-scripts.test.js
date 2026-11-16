@@ -75,7 +75,7 @@ test('ci node version satisfies package engine policy', () => {
 
 test('ci build-and-test job exposes a versionless required check context', () => {
   const workflow = readCiWorkflow();
-  const job = workflow.match(/^  build-and-test:\n([\s\S]*?)(?=^  \S+:$|(?![\s\S]))/m)?.[1] ?? '';
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*?)(?=^  [a-z-]+:$|(?![\s\S]))/m)?.[1] ?? '';
 
   assert.ok(job, 'ci.yml must keep the build-and-test job');
   assert.match(
@@ -314,7 +314,7 @@ test('public npm package does not block npm global install with preinstall', () 
   assert.equal(scripts.preinstall, undefined);
 });
 
-test('ts-node source tests have direct node type definitions', () => {
+test('source tests have direct node type definitions', () => {
   const packageJson = readPackageJson();
   const minimumMajor = Number(packageJson.engines.node.match(/>=\s*(\d+)/)?.[1]);
   const typesNode = packageJson.devDependencies?.['@types/node'] ?? '';
@@ -337,4 +337,19 @@ test('readme install section documents the package engine node range', () => {
     installSection.includes(`Node.js ${packageJson.engines.node}`),
     `readme.md Install section must document Node.js ${packageJson.engines.node}`
   );
+});
+
+test('ci runs the local ontology lane after the root build', () => {
+  const workflow = readCiWorkflow();
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*?)(?=^  [a-z-]+:$|(?![\s\S]))/m)?.[1] ?? '';
+  const buildIndex = job.search(/^        run: pnpm run build$/m);
+  const ontologyIndex = job.search(/^        run: STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 pnpm run test:ontology:local$/m);
+
+  assert.notEqual(buildIndex, -1, 'build-and-test must keep the root build step');
+  assert.notEqual(
+    ontologyIndex,
+    -1,
+    'build-and-test must run STEALTH_LIGHTBEACON_LOCAL_ONTOLOGY_TESTS=1 pnpm run test:ontology:local'
+  );
+  assert.ok(ontologyIndex > buildIndex, 'the ontology lane must run after the root build');
 });

@@ -3,9 +3,11 @@ overrides:
   sharp: ^0.35.5
 
 # pnpm 11 requires an explicit build-script decision per dependency. These
-# three are not needed in CI: sharp ships prebuilt binaries, and
-# onnxruntime-node/protobufjs builds only serve optional local ontology paths.
+# are not needed in CI: esbuild and sharp ship prebuilt platform binaries via
+# optional dependencies, and onnxruntime-node/protobufjs builds only serve
+# optional local ontology paths.
 allowBuilds:
+  esbuild: false
   onnxruntime-node: false
   protobufjs: false
   sharp: false
