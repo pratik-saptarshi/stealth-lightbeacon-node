@@ -75,7 +75,7 @@ test('ci node version satisfies package engine policy', () => {
 
 test('ci build-and-test job exposes a versionless required check context', () => {
   const workflow = readCiWorkflow();
-  const job = workflow.match(/^  build-and-test:\n([\s\S]*)/m)?.[1] ?? '';
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*?)(?=^  \S+:$|(?![\s\S]))/m)?.[1] ?? '';
 
   assert.ok(job, 'ci.yml must keep the build-and-test job');
   assert.match(
@@ -89,7 +89,7 @@ test('ci build-and-test job exposes a versionless required check context', () =>
 
 test('ci build-and-test job exercises the desktop app after the root build', () => {
   const workflow = readCiWorkflow();
-  const job = workflow.match(/^  build-and-test:\n([\s\S]*)/m)?.[1] ?? '';
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*?)(?=^  \S+:$|(?![\s\S]))/m)?.[1] ?? '';
 
   assert.ok(job, 'ci.yml must keep the build-and-test job');
   assert.match(

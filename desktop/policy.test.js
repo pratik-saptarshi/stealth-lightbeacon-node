@@ -17,11 +17,11 @@ test('platform.json states the supported desktop floor in machine-readable form'
   assert.deepEqual(policy, { macos: '13', windows: 'x64', linux: 'x64' });
 });
 
-test('desktop workspace allows the electron postinstall to download a runtime', () => {
+test('desktop workspace keeps an explicit electron build allowlist', () => {
   const workspace = readDesktopWorkspace();
 
   assert.match(workspace, /^allowBuilds:$/m, 'pnpm-workspace.yaml must keep an allowBuilds block');
-  assert.match(workspace, /^ {2}electron: true$/m, 'electron must be allowed to run its install script');
+  assert.match(workspace, /^ {2}electron: true$/m, 'electron must have an explicit allowBuilds decision');
   assert.doesNotMatch(
     workspace,
     /set this to true or false/,
