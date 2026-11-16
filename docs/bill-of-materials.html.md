@@ -192,7 +192,7 @@ The repository intentionally contains development and validation material that m
 ### 3.2 Development Dependencies
 
 - `typescript`
-- `ts-node`
+- `tsx`
 - `release-it`
 - `@release-it/conventional-changelog`
 
