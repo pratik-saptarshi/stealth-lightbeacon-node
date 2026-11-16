@@ -2,15 +2,18 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
-test('tsconfig keeps CommonJS mode and sets ignoreDeprecations for legacy Node resolution', () => {
-  const tsconfigPath = path.join(__dirname, '..', 'tsconfig.json');
-  const tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
-  const compilerOptions = tsconfig.compilerOptions ?? {};
+const repoRoot = path.join(__dirname, '..');
 
-  assert.equal(compilerOptions.module, 'CommonJS');
-  assert.equal(compilerOptions.moduleResolution, 'Node');
-  assert.equal(compilerOptions.ignoreDeprecations, '5.0');
+test('the TypeScript compiler accepts tsconfig.json', () => {
+  const result = spawnSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--noEmit', '--incremental', 'false'], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  });
+
+  assert.equal(result.error, undefined, result.error?.message);
+  assert.equal(result.status, 0, `tsc exited ${result.status}\n${result.stdout}\n${result.stderr}`);
 });
 
 test('runtime dependency imports do not use dynamic eval wrappers', () => {
