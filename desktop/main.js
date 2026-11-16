@@ -64,8 +64,10 @@ function start() {
   });
 }
 
-// Only boot the app when this file is the entry point (`electron .`). The smoke
+// Only boot the app when this file is the entry point (`electron .`). In
+// Electron, `require.main` is Electron's bootstrap, not the app entry, so use
+// `module.parent` to distinguish the entry from a required module. The smoke
 // harness requires this module for `createWindow` and drives the lifecycle.
-if (require.main === module) start();
+if (!module.parent) start();
 
 module.exports = { createWindow };
