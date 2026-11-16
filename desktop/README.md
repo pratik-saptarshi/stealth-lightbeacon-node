@@ -23,15 +23,15 @@ webPreferences: {
 `contextBridge: false` is not a real `webPreferences` key. Electron ignores
 unknown keys, so the option did nothing. The setting that actually governs
 renderer isolation is `contextIsolation`, which **defaults to `true`** in
-current Electron. The renderer therefore ran with `contextIsolation: true`
-*and* `nodeIntegration: true`: an isolated world whose inline script still
-reached Node's `require` because Node integration was on. That combination is
-the worst of both worlds — no preload bridge, but a full Node sink in a page
-that renders untrusted audit data.
+current Electron. The renderer therefore ran isolated with `nodeIntegration:
+true`, but Node integration is inert under context isolation: the inline
+`require('electron')` threw `ReferenceError: require is not defined` and the
+IPC path was dead. This was a broken renderer, not an exploitable Node sink.
 
-The `require` call is the sink. Anything that can inject a script into the
-renderer (a compromised page, a malicious audit finding rendered as HTML, a
-future XSS) inherits the main process's Node privileges.
+Disabling `contextIsolation` would have made the inline `require` work — and
+turned the page into a real Node sink. That is why the preload bridge was
+chosen instead: the renderer keeps isolation, and the only privileged surface
+is the narrow `compareAudits` function.
 
 ### Chosen fix: preload + `contextBridge`
 
