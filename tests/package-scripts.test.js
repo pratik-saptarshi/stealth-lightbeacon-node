@@ -75,7 +75,7 @@ test('ci node version satisfies package engine policy', () => {
 
 test('ci build-and-test job exposes a versionless required check context', () => {
   const workflow = readCiWorkflow();
-  const job = workflow.match(/^  build-and-test:\n([\s\S]*)/m)?.[1] ?? '';
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*?)(?=^  \S+:$|(?![\s\S]))/m)?.[1] ?? '';
 
   assert.ok(job, 'ci.yml must keep the build-and-test job');
   assert.match(
@@ -85,6 +85,48 @@ test('ci build-and-test job exposes a versionless required check context', () =>
   );
   assert.doesNotMatch(job, /matrix:/, 'a matrix appends its values to the check context');
   assert.match(job, /node-version:\s*26\.13\.1/, 'build-and-test must pin the patched Node version directly');
+});
+
+test('ci build-and-test job exercises the desktop app after the root build', () => {
+  const workflow = readCiWorkflow();
+  const job = workflow.match(/^  build-and-test:\n([\s\S]*?)(?=^  \S+:$|(?![\s\S]))/m)?.[1] ?? '';
+
+  assert.ok(job, 'ci.yml must keep the build-and-test job');
+  assert.match(
+    job,
+    /^    timeout-minutes: 20$/m,
+    'build-and-test must cap the whole job at 20 minutes for the desktop steps'
+  );
+
+  const rootInstallIndex = job.indexOf('run: pnpm install --frozen-lockfile');
+  assert.notEqual(rootInstallIndex, -1, 'build-and-test must install root dependencies');
+  const rootBuildIndex = job.indexOf('run: pnpm run build');
+  assert.notEqual(rootBuildIndex, -1, 'build-and-test must build the root project');
+  assert.ok(
+    rootInstallIndex < rootBuildIndex,
+    'build-and-test must install root dependencies before the build'
+  );
+
+  const desktopSteps = [
+    'cd desktop && pnpm install --frozen-lockfile',
+    'node --test desktop/policy.test.js',
+    'pnpm audit --prod',
+    'ELECTRON_RUN_AS_NODE= ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a pnpm run smoke',
+    'ELECTRON_RUN_AS_NODE= ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a pnpm run fixture'
+  ];
+
+  let previousIndex = rootBuildIndex;
+  for (const step of desktopSteps) {
+    const stepIndex = job.indexOf(step, previousIndex);
+    assert.notEqual(stepIndex, -1, `build-and-test must run "${step}" after the root build`);
+    previousIndex = stepIndex;
+  }
+
+  assert.doesNotMatch(
+    job,
+    /ELECTRON_RUN_AS_NODE=\S/,
+    'ELECTRON_RUN_AS_NODE must stay empty so Electron boots the app instead of plain Node'
+  );
 });
 
 test('all github workflow node versions satisfy package engine policy', () => {
